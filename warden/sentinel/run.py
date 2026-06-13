@@ -69,9 +69,24 @@ def main() -> int:
 
     # dry-run / active: hand each new incident to the agent
     from warden.agent.runner import handle_incident  # late import: agent deps not needed in detect mode
+    channel = get_channel(config)
+    failures = 0
     for incident_id, anomaly in new_incidents:
-        asyncio.run(handle_incident(incident_id, config, backend, store))
-    return 0
+        try:
+            asyncio.run(handle_incident(incident_id, config, backend, store, channel))
+        except Exception as exc:
+            # A failed agent run must not crash the cycle or leave the incident
+            # silently open — a stuck-open incident suppresses all future
+            # detection of that problem. Close it (escalated) so it re-opens and
+            # retries next cycle once the transient cause clears, and surface it.
+            failures += 1
+            store.close_incident(incident_id, "escalated")
+            try:
+                channel.send(f"⚠️ warden incident #{incident_id} ({anomaly.category}) "
+                             f"could not be processed: {str(exc)[:300]}")
+            except Exception:
+                pass
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
