@@ -8,6 +8,7 @@ WhatsApp path. Setup is one bot token + one channel id.
 """
 from __future__ import annotations
 
+import time
 import urllib.parse
 
 import httpx
@@ -19,6 +20,8 @@ API = "https://discord.com/api/v10"
 APPROVE_EMOJI = "✅"
 REJECT_EMOJI = "❌"
 
+_MAX_RETRIES = 3
+
 
 def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
@@ -28,6 +31,21 @@ def _emoji(e: str) -> str:
     return urllib.parse.quote(e)
 
 
+def _request(method: str, token: str, url: str, **kwargs) -> httpx.Response:
+    """One Discord API call that respects 429 rate limits: on a 429 it waits the
+    Retry-After the API specifies and retries, instead of raising and dropping
+    the message/poll. Discord's per-route limit is small (~5/s)."""
+    for attempt in range(_MAX_RETRIES + 1):
+        resp = httpx.request(method, url, headers=_headers(token), timeout=30, **kwargs)
+        if resp.status_code == 429 and attempt < _MAX_RETRIES:
+            retry_after = float(resp.headers.get("retry-after", "1"))
+            time.sleep(min(retry_after, 10) + 0.1)
+            continue
+        resp.raise_for_status()
+        return resp
+    return resp  # unreachable, but keeps type checkers happy
+
+
 class DiscordChannel:
     def __init__(self, config: Config):
         if not (config.discord_bot_token and config.discord_channel_id):
@@ -35,13 +53,9 @@ class DiscordChannel:
         self.config = config
 
     def _post_message(self, text: str) -> dict:
-        resp = httpx.post(
-            f"{API}/channels/{self.config.discord_channel_id}/messages",
-            headers=_headers(self.config.discord_bot_token),
-            json={"content": text[:2000]},  # Discord hard-limits message bodies to 2000 chars
-            timeout=30,
-        )
-        resp.raise_for_status()
+        resp = _request("POST", self.config.discord_bot_token,
+                        f"{API}/channels/{self.config.discord_channel_id}/messages",
+                        json={"content": text[:2000]})  # Discord caps message bodies at 2000 chars
         return resp.json()
 
     def send(self, text: str) -> None:
@@ -58,37 +72,24 @@ class DiscordChannel:
 
 
 def add_reaction(config: Config, message_id: str, emoji: str) -> None:
-    resp = httpx.put(
-        f"{API}/channels/{config.discord_channel_id}/messages/{message_id}"
-        f"/reactions/{_emoji(emoji)}/@me",
-        headers=_headers(config.discord_bot_token),
-        timeout=30,
-    )
-    resp.raise_for_status()
+    _request("PUT", config.discord_bot_token,
+             f"{API}/channels/{config.discord_channel_id}/messages/{message_id}"
+             f"/reactions/{_emoji(emoji)}/@me")
 
 
 def reaction_user_ids(config: Config, message_id: str, emoji: str) -> set[str]:
     """User ids that reacted to a message with the given emoji (the bot's own
     seed reaction is included; callers filter to the owner)."""
-    resp = httpx.get(
-        f"{API}/channels/{config.discord_channel_id}/messages/{message_id}"
-        f"/reactions/{_emoji(emoji)}",
-        headers=_headers(config.discord_bot_token),
-        params={"limit": 100},
-        timeout=30,
-    )
-    resp.raise_for_status()
+    resp = _request("GET", config.discord_bot_token,
+                    f"{API}/channels/{config.discord_channel_id}/messages/{message_id}"
+                    f"/reactions/{_emoji(emoji)}", params={"limit": 100})
     return {str(u["id"]) for u in resp.json()}
 
 
 def edit_message(config: Config, message_id: str, text: str) -> None:
-    resp = httpx.patch(
-        f"{API}/channels/{config.discord_channel_id}/messages/{message_id}",
-        headers=_headers(config.discord_bot_token),
-        json={"content": text[:2000]},
-        timeout=30,
-    )
-    resp.raise_for_status()
+    _request("PATCH", config.discord_bot_token,
+             f"{API}/channels/{config.discord_channel_id}/messages/{message_id}",
+             json={"content": text[:2000]})
 
 
 def fetch_messages(config: Config, after: str | None = None, limit: int = 50) -> list[dict]:
@@ -97,11 +98,6 @@ def fetch_messages(config: Config, after: str | None = None, limit: int = 50) ->
     params: dict[str, object] = {"limit": limit}
     if after:
         params["after"] = after
-    resp = httpx.get(
-        f"{API}/channels/{config.discord_channel_id}/messages",
-        headers=_headers(config.discord_bot_token),
-        params=params,
-        timeout=30,
-    )
-    resp.raise_for_status()
+    resp = _request("GET", config.discord_bot_token,
+                    f"{API}/channels/{config.discord_channel_id}/messages", params=params)
     return resp.json()

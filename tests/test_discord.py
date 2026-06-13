@@ -42,15 +42,34 @@ def _queue_delete(store) -> int:
 def test_send_posts_to_channel_with_bot_auth(dconfig, monkeypatch):
     captured = {}
 
-    def fake_post(url, headers=None, json=None, timeout=None):
-        captured.update(url=url, headers=headers, json=json)
-        return httpx.Response(200, json={"id": "m-0"}, request=httpx.Request("POST", url))
+    def fake_request(method, url, headers=None, json=None, timeout=None, **kw):
+        captured.update(method=method, url=url, headers=headers, json=json)
+        return httpx.Response(200, json={"id": "m-0"}, request=httpx.Request(method, url))
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "request", fake_request)
     DiscordChannel(dconfig).send("hello")
+    assert captured["method"] == "POST"
     assert captured["url"] == f"{API}/channels/chan-42/messages"
     assert captured["headers"]["Authorization"] == "Bot bot-token-abc"
     assert captured["json"] == {"content": "hello"}
+
+
+def test_request_retries_on_429_then_succeeds(dconfig, monkeypatch):
+    import warden.notifier.discord as dmod
+    monkeypatch.setattr(dmod.time, "sleep", lambda *_: None)  # don't actually wait
+    calls = {"n": 0}
+
+    def fake_request(method, url, headers=None, timeout=None, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(429, headers={"retry-after": "0.2"},
+                                  json={"message": "rate limited"},
+                                  request=httpx.Request(method, url))
+        return httpx.Response(200, json=[], request=httpx.Request(method, url))
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+    msgs = dmod.fetch_messages(dconfig)        # should retry past the 429
+    assert msgs == [] and calls["n"] == 2
 
 
 def test_send_requires_credentials(config):
@@ -118,15 +137,15 @@ def test_owner_no_rejects(dconfig, store, channel):
 def test_send_approval_posts_and_seeds_both_reactions(dconfig, monkeypatch):
     calls = {"reactions": []}
 
-    def fake_post(url, headers=None, json=None, timeout=None):
-        return httpx.Response(200, json={"id": "msg-77"}, request=httpx.Request("POST", url))
+    def fake_request(method, url, headers=None, json=None, timeout=None, **kw):
+        if method == "POST":
+            return httpx.Response(200, json={"id": "msg-77"}, request=httpx.Request(method, url))
+        if method == "PUT":
+            calls["reactions"].append(url)
+            return httpx.Response(204, request=httpx.Request(method, url))
+        return httpx.Response(200, json={}, request=httpx.Request(method, url))
 
-    def fake_put(url, headers=None, timeout=None):
-        calls["reactions"].append(url)
-        return httpx.Response(204, request=httpx.Request("PUT", url))
-
-    monkeypatch.setattr(httpx, "post", fake_post)
-    monkeypatch.setattr(httpx, "put", fake_put)
+    monkeypatch.setattr(httpx, "request", fake_request)
     ref = DiscordChannel(dconfig).send_approval(7, "approve?")
     assert ref == "msg-77"
     # both ✅ and ❌ seeded on the posted message

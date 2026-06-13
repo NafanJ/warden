@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 User=nathan
 WorkingDirectory=/opt/warden
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/warden/.venv/bin/uvicorn warden.webhook.app:app --host 127.0.0.1 --port 8484
 Restart=on-failure
 RestartSec=5

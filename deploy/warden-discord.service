@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 User=nathan
 WorkingDirectory=/opt/warden
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/warden/.venv/bin/python -m warden.notifier.discord_poller
 Restart=on-failure
 RestartSec=5

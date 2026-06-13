@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=oneshot
 User=nathan
 WorkingDirectory=/opt/warden
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/warden/.venv/bin/python -m warden.sentinel.run
 TimeoutStartSec=900
 Nice=10
