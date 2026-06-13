@@ -35,6 +35,11 @@ class Config:
     stall_min_age_hours: float = 1.0
     ignored_containers: list[str] = field(default_factory=list)
 
+    # The only directory trees warden is ever allowed to delete within. Enforced
+    # both at the permission gate (so out-of-bounds deletes are never queued) and
+    # in the backend (defense in depth).
+    delete_roots: list[str] = field(default_factory=lambda: ["/mnt/Modi/Kodi/downloads/"])
+
     notify_channel: str = "log"
     wa_token: str = ""
     wa_phone_number_id: str = ""
@@ -66,6 +71,19 @@ def _csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+def path_within(path: str, roots: list[str]) -> bool:
+    """True if `path` resolves to inside one of the allowed root trees."""
+    try:
+        rp = str(Path(path).resolve())
+    except OSError:
+        return False
+    for root in roots:
+        rr = str(Path(root).resolve())
+        if rp == rr or rp.startswith(rr + "/"):
+            return True
+    return False
+
+
 def load_config(env_file: str | Path | None = None) -> Config:
     load_dotenv(env_file or Path(__file__).resolve().parent.parent / ".env")
     e = os.environ.get
@@ -91,6 +109,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         stall_threshold_hours=float(e("STALL_THRESHOLD_HOURS", "4")),
         stall_min_age_hours=float(e("STALL_MIN_AGE_HOURS", "1")),
         ignored_containers=_csv(e("IGNORED_CONTAINERS", "")),
+        delete_roots=_csv(e("DELETE_ROOTS", "/mnt/Modi/Kodi/downloads/")),
         notify_channel=e("NOTIFY_CHANNEL", "log"),
         wa_token=e("WA_TOKEN", ""),
         wa_phone_number_id=e("WA_PHONE_NUMBER_ID", ""),

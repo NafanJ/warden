@@ -16,9 +16,7 @@ from typing import Any
 
 import httpx
 
-from warden.config import Config
-
-ALLOWED_DELETE_ROOTS = ("/mnt/Modi/Kodi/downloads/",)
+from warden.config import Config, path_within
 
 
 def _run(cmd: list[str], timeout: int = 30) -> str:
@@ -203,7 +201,7 @@ class LiveBackend:
         deleted = []
         for raw in paths:
             p = Path(raw).resolve()
-            if not any(str(p).startswith(root) for root in ALLOWED_DELETE_ROOTS):
+            if not path_within(str(p), self.config.delete_roots):
                 raise PermissionError(f"refusing to delete outside allowed roots: {p}")
             if p.is_dir():
                 shutil.rmtree(p)

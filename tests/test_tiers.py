@@ -57,6 +57,25 @@ async def test_tier2_duplicate_not_requeued(config, store, channel):
     assert count == 1
 
 
+async def test_delete_outside_roots_denied_not_queued(config, store, channel):
+    handler = handler_for(config, store, channel)
+    args = {"paths": ["/mnt/Modi/found.001"], "reason": "junk"}  # outside downloads tree
+    result = await handler("mcp__warden__delete_paths", args, None)
+    assert result.behavior == "deny"
+    assert "recommend" in result.message.lower() or "outside" in result.message.lower()
+    # crucially: not queued, owner not pinged about an un-executable delete
+    assert store.find_pending_action("delete_paths", args) is None
+    assert channel.sent == []
+
+
+async def test_delete_inside_roots_still_queues(config, store, channel):
+    handler = handler_for(config, store, channel)
+    args = {"paths": ["/mnt/Modi/Kodi/downloads/complete/old"], "reason": "orphaned"}
+    result = await handler("mcp__warden__delete_paths", args, None)
+    assert result.behavior == "deny"  # deny-pending-approval, but it IS queued
+    assert store.find_pending_action("delete_paths", args) is not None
+
+
 async def test_tier2_allowed_after_approval(config, store, channel):
     handler = handler_for(config, store, channel)
     args = {"paths": ["/mnt/Modi/Kodi/downloads/complete/old"], "reason": "orphaned"}

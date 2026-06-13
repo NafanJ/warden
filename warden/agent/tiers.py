@@ -17,7 +17,7 @@ from typing import Any
 
 from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 
-from warden.config import Config
+from warden.config import Config, path_within
 from warden.notifier import Channel
 from warden.store import Store
 
@@ -103,6 +103,21 @@ def decide_tool(config: Config, store: Store, channel: Channel,
     if tier == 0:
         store.audit(tool_name, input_data, 0, "allowed", incident_id)
         return True, ""
+
+    # Delete-scope policy: warden may only delete within its configured roots.
+    # Catch out-of-bounds deletes here, before queuing, so the owner is never
+    # pinged about a deletion that could never execute — and tell the agent to
+    # recommend it in the report instead.
+    if bare_name(tool_name) == "delete_paths":
+        outside = [p for p in input_data.get("paths", [])
+                   if not path_within(p, config.delete_roots)]
+        if outside:
+            store.audit(tool_name, input_data, tier, "denied", incident_id)
+            return False, (
+                f"warden may only delete within {', '.join(config.delete_roots)}. "
+                f"These paths are outside that and will NOT be deleted: {', '.join(outside)}. "
+                "Do not call delete_paths on them — instead list them as manual "
+                "recommendations under '## Proposed actions' in your report.")
 
     if config.mode == "dry-run":
         store.audit(tool_name, input_data, tier, "denied", incident_id)
