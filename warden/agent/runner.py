@@ -113,6 +113,7 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
         store.set_report_path(incident_id, str(path))
 
     run_result["cost_usd"] = cost
+    store.set_incident_cost(incident_id, cost)
 
     status = run_result.get("status", "escalated")
     if status in ("resolved", "escalated"):

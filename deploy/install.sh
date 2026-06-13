@@ -51,8 +51,11 @@ cp "$DEST/deploy/warden-sentinel.service" /etc/systemd/system/
 cp "$DEST/deploy/warden-sentinel.timer" /etc/systemd/system/
 cp "$DEST/deploy/warden-webhook.service" /etc/systemd/system/
 cp "$DEST/deploy/warden-discord.service" /etc/systemd/system/
+cp "$DEST/deploy/warden-summary.service" /etc/systemd/system/
+cp "$DEST/deploy/warden-summary.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now warden-sentinel.timer
+systemctl enable --now warden-summary.timer
 
 echo
 echo "warden installed. Sentinel timer active."

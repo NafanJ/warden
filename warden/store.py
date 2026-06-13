@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS incidents (
     status TEXT NOT NULL DEFAULT 'open',          -- open | resolved | escalated
     opened_at TEXT NOT NULL,
     closed_at TEXT,
-    report_path TEXT
+    report_path TEXT,
+    cost_usd REAL                                 -- agent cost for this incident
 );
 CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +67,9 @@ class Store:
         cols = {r[1] for r in self.conn.execute("PRAGMA table_info(actions)")}
         if "notify_ref" not in cols:
             self.conn.execute("ALTER TABLE actions ADD COLUMN notify_ref TEXT")
+        icols = {r[1] for r in self.conn.execute("PRAGMA table_info(incidents)")}
+        if "cost_usd" not in icols:
+            self.conn.execute("ALTER TABLE incidents ADD COLUMN cost_usd REAL")
 
     # --- incidents ---
     def open_incident(self, key: str, category: str, summary: str) -> int:
@@ -105,6 +109,21 @@ class Store:
     def set_report_path(self, incident_id: int, report_path: str) -> None:
         self.conn.execute("UPDATE incidents SET report_path=? WHERE id=?", (report_path, incident_id))
         self.conn.commit()
+
+    def set_incident_cost(self, incident_id: int, cost: float | None) -> None:
+        self.conn.execute("UPDATE incidents SET cost_usd=? WHERE id=?", (cost, incident_id))
+        self.conn.commit()
+
+    def unresolved_incidents(self) -> list[dict[str, Any]]:
+        """The latest incident per anomaly key, where that latest one is still
+        open or escalated — i.e. conditions that still need attention. Powers the
+        daily summary's 'Needs you' section."""
+        rows = self.conn.execute(
+            "SELECT i.* FROM incidents i "
+            "JOIN (SELECT key, MAX(id) AS mid FROM incidents GROUP BY key) m ON i.id = m.mid "
+            "WHERE i.status IN ('open', 'escalated') ORDER BY i.id"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_incident(self, incident_id: int) -> dict[str, Any] | None:
         row = self.conn.execute("SELECT * FROM incidents WHERE id=?", (incident_id,)).fetchone()

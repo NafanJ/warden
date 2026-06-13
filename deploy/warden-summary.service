@@ -1,0 +1,13 @@
+[Unit]
+Description=warden daily summary — end-of-day digest across all services
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nathan
+WorkingDirectory=/opt/warden
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/warden/.venv/bin/python -m warden.summary
+TimeoutStartSec=300
+Nice=10
