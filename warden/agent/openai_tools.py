@@ -42,6 +42,8 @@ TOOL_SCHEMAS: list[dict] = [
         {"name": {"type": "string"}}, ["name"]),
     _fn("container_restart", "Restart a container (Tier 1, reversible).",
         {"name": {"type": "string"}}, ["name"]),
+    _fn("docker_prune", "Reclaim disk by removing dangling Docker images and build cache "
+        "(Tier 1, safe — only unreferenced layers)."),
     _fn("disk_usage", "Disk usage for the monitored mount points."),
     _fn("du_summary", "Directory size breakdown (du) for a path.",
         {"path": {"type": "string"}, "depth": {"type": "integer", "default": 1}}, ["path"]),
@@ -98,6 +100,8 @@ def execute_tool(name: str, args: dict[str, Any], *, backend: Backend, config: C
             return _stringify(backend.container_inspect(args["name"]))
         if name == "container_restart":
             return _stringify(backend.container_restart(args["name"]))
+        if name == "docker_prune":
+            return _stringify(backend.docker_prune())
         if name == "disk_usage":
             return _stringify(backend.disk_usage(config.disk_paths))
         if name == "du_summary":

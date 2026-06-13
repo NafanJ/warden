@@ -26,7 +26,7 @@ TIER0 = {
     "du_summary", "memory", "list_torrents", "arr_queue", "check_urls",
     "list_dir", "write_report",
 }
-TIER1 = {"container_restart", "arr_blocklist_research", "remove_torrents"}
+TIER1 = {"container_restart", "arr_blocklist_research", "remove_torrents", "docker_prune"}
 TIER2 = {"delete_paths"}
 
 

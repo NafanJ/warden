@@ -67,6 +67,13 @@ class LiveBackend:
     def container_restart(self, name: str) -> str:
         return _run(["docker", "restart", name], timeout=120) or f"restarted {name}"
 
+    def docker_prune(self) -> str:
+        # dangling images + build cache only — never -a, so nothing a container
+        # (running or stopped) references is touched. Pure reclaim.
+        images = _run(["docker", "image", "prune", "-f"], timeout=120)
+        cache = _run(["docker", "builder", "prune", "-f"], timeout=120)
+        return f"docker image prune:\n{images.strip()}\n\ndocker builder prune:\n{cache.strip()}"
+
     # --- system ---
     def disk_usage(self, paths: list[str]) -> list[dict[str, Any]]:
         results = []

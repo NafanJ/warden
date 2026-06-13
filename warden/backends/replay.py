@@ -38,6 +38,9 @@ class ReplayBackend:
     def container_restart(self, name: str) -> str:
         return self._record("container_restart", name=name)
 
+    def docker_prune(self) -> str:
+        return self._record("docker_prune")
+
     # --- system ---
     def disk_usage(self, paths: list[str]) -> list[dict[str, Any]]:
         return self.snapshot.get("disk_usage", [])

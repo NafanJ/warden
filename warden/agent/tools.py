@@ -61,6 +61,15 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
         except Exception as exc:
             return _error(exc)
 
+    @tool("docker_prune",
+          "Reclaim disk by removing dangling Docker images and build cache (Tier 1, "
+          "safe — only unreferenced layers, nothing a container uses).", {})
+    async def docker_prune(args):
+        try:
+            return _text(backend.docker_prune())
+        except Exception as exc:
+            return _error(exc)
+
     @tool("disk_usage", "Disk usage for the monitored mount points.", {})
     async def disk_usage(args):
         try:
@@ -170,7 +179,7 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
 
     tools = [
         get_containers, container_logs, container_inspect, container_restart,
-        disk_usage, du_summary, memory, list_torrents, remove_torrents,
+        docker_prune, disk_usage, du_summary, memory, list_torrents, remove_torrents,
         arr_queue, arr_blocklist_research, check_urls, list_dir, delete_paths,
         write_report,
     ]

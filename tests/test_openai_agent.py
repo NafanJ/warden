@@ -116,6 +116,15 @@ def test_loop_guard_blocks_repeated_mutation(config, store, channel):
     assert backend.actions_taken == [{"action": "container_restart", "name": "plex"}]
 
 
+def test_docker_prune_executes_as_tier1(config, store, channel):
+    scripted = [
+        _resp(_assistant(tool_calls=[_tc("c1", "docker_prune", {})])),
+        _resp(_assistant(tool_calls=[_tc("c2", "write_report", REPORT_ARGS)])),
+    ]
+    _, _, _, backend = _run(config, store, channel, scripted)
+    assert {"action": "docker_prune"} in backend.actions_taken  # autonomous in active mode
+
+
 def test_plain_text_answer_without_tools(config, store, channel):
     scripted = [_resp(_assistant(content="no tools needed"))]
     text, _, run_result, _ = _run(config, store, channel, scripted)

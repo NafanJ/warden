@@ -132,6 +132,24 @@ def test_owner_no_rejects(dconfig, store, channel):
     assert backend.actions_taken == []
 
 
+# --- on-demand status command ---
+
+def test_status_command_replies_with_digest(dconfig, store, channel):
+    backend = ReplayBackend({
+        "docker_ps": [{"name": "plex", "state": "running", "status": "Up"}],
+        "disk_usage": [{"path": "/mnt/Modi", "used_pct": 93.8, "free_gb": 200,
+                        "total_gb": 4000, "used_gb": 3800}],
+        "torrents": [],
+    })
+    process_batch([_msg("9001", "status")], dconfig, backend, store, channel)
+    assert any("warden status" in s for s in channel.sent)
+
+
+def test_status_command_ignored_from_non_owner(dconfig, store, channel):
+    process_batch([_msg("9002", "status", author=OTHER)], dconfig, ReplayBackend({}), store, channel)
+    assert channel.sent == []
+
+
 # --- send_approval seeds reactions ---
 
 def test_send_approval_posts_and_seeds_both_reactions(dconfig, monkeypatch):

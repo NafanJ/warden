@@ -56,13 +56,13 @@ def is_notable(g: dict[str, Any]) -> bool:
     return bool(g["incidents"] or g["tier1"] or g["actions"])
 
 
-def format_summary(g: dict[str, Any]) -> str:
+def format_summary(g: dict[str, Any], label: str = "daily") -> str:
     disk = "  ·  ".join(
         f"{d['path']} {d['used_pct']}%" + (" ⚠️" if d.get("used_pct", 0) >= 92 else "")
         for d in g["disk"]
     ) or "n/a"
     lines = [
-        f"📊 **warden daily — {g['date']}**",
+        f"📊 **warden {label} — {g['date']}**",
         f"Containers:  {g['containers_up']}/{g['containers_total']} up",
         f"Disk:        {disk}",
         f"Downloads:   {g['torrents']} torrent(s), {g['stalled']} stalled",

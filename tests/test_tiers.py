@@ -112,6 +112,10 @@ def test_describe_action_missing_path_marked_not_found():
     assert "not found on disk" in desc
 
 
+def test_docker_prune_is_tier1():
+    assert tier_of("mcp__warden__docker_prune", {}) == 1
+
+
 def test_remove_torrents_with_data_is_tier2():
     assert tier_of("mcp__warden__remove_torrents", {"ids": [1], "delete_data": False}) == 1
     assert tier_of("mcp__warden__remove_torrents", {"ids": [1], "delete_data": True}) == 2

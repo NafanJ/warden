@@ -35,7 +35,7 @@ is the point: not a demo, a production log.
   fix (e.g. a genuinely full disk) from re-alerting every cycle.
 - **Agent** — one function-calling session per incident, powered by **OpenAI
   (`gpt-4o-mini` by default) or the Claude Agent SDK**, selected with `LLM_PROVIDER`.
-  It has **no shell and no file access** — only 15 purpose-built tools wrapping Docker,
+  It has **no shell and no file access** — only 16 purpose-built tools wrapping Docker,
   the *arr APIs, Transmission RPC, and the filesystem, every one routed through the same
   permission gate regardless of provider.
 - **Approvals** — the owner approves pending action #42 by tapping a ✅ reaction

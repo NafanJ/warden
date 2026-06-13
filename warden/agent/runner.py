@@ -37,6 +37,10 @@ owner approval automatically when you call them — never retry a queued action.
 incomplete/ folders). For space used elsewhere — orphaned recovery files, the media \
 library, system dirs — do NOT call delete_paths; record it as a manual recommendation \
 under '## Proposed actions' instead. Calling delete_paths outside that tree is refused.
+- For disk pressure, reclaim space with the safe Tier 1 levers first: docker_prune \
+(dead image/build layers — often the easiest win), then removing fully-seeded torrents \
+already imported by the *arr apps, then deleting completed downloads inside the \
+downloads tree. Only escalate to a Tier 2 delete when those aren't enough.
 - If the system denies an action (dry-run mode or pending approval), continue the \
 investigation and record it under '## Proposed actions'.
 - Stay within the incident's scope. Do not touch unrelated services.

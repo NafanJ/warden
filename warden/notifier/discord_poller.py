@@ -17,6 +17,7 @@ from warden.notifier import Channel, get_channel
 from warden.notifier import discord as dc
 from warden.notifier.discord import fetch_messages
 from warden.store import Store
+from warden.summary import format_summary, gather
 from warden.webhook.approvals import REPLY, handle_reply
 
 POLL_SECONDS = 5
@@ -34,9 +35,16 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
         highest = str(msg["id"])
         author_id = str(msg.get("author", {}).get("id", ""))
         if config.discord_owner_id and author_id != config.discord_owner_id:
-            continue  # only the owner may approve
-        content = msg.get("content", "")
-        if not REPLY.match(content or ""):
+            continue  # only the owner may approve / query
+        content = (msg.get("content") or "").strip()
+        if content.lower() in ("status", "!status"):
+            # on-demand live digest (same data as the daily summary, no LLM)
+            try:
+                channel.send(format_summary(gather(config, backend, store), label="status"))
+            except Exception as exc:
+                channel.send(f"warden: couldn't build status — {exc}")
+            continue
+        if not REPLY.match(content):
             continue  # ignore ordinary chatter — only react to YES/NO <id>
         channel.send(handle_reply(content, config, backend, store, channel))
     return highest
