@@ -67,6 +67,22 @@ async def test_tier2_allowed_after_approval(config, store, channel):
     assert result.behavior == "allow"
 
 
+def test_describe_action_includes_path_size(tmp_path):
+    from warden.agent.tiers import describe_action
+    f = tmp_path / "junk.bin"
+    f.write_bytes(b"x" * 2048)
+    desc = describe_action("mcp__warden__delete_paths",
+                           {"paths": [str(f)], "reason": "cleanup"})
+    assert "2.0 KB" in desc and "cleanup" in desc and str(f) in desc
+
+
+def test_describe_action_missing_path_marked_not_found():
+    from warden.agent.tiers import describe_action
+    desc = describe_action("mcp__warden__delete_paths",
+                           {"paths": ["/no/such/path/here"], "reason": "x"})
+    assert "not found on disk" in desc
+
+
 def test_remove_torrents_with_data_is_tier2():
     assert tier_of("mcp__warden__remove_torrents", {"ids": [1], "delete_data": False}) == 1
     assert tier_of("mcp__warden__remove_torrents", {"ids": [1], "delete_data": True}) == 2

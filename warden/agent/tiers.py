@@ -12,6 +12,7 @@ own backend-wrapped tools.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
@@ -48,13 +49,42 @@ def tier_of(tool_name: str, input_data: dict[str, Any]) -> int | None:
     return None
 
 
+def _human_size(n: float) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} PB"
+
+
+def _path_size(path: str) -> int | None:
+    """On-disk size of a file or directory tree, or None if it can't be read."""
+    p = Path(path)
+    try:
+        if p.is_dir():
+            return sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+        return p.stat().st_size
+    except OSError:
+        return None
+
+
 def describe_action(tool_name: str, input_data: dict[str, Any]) -> str:
     name = bare_name(tool_name)
     if name == "delete_paths":
         paths = input_data.get("paths", [])
         reason = input_data.get("reason", "")
-        listing = ", ".join(paths[:5]) + ("…" if len(paths) > 5 else "")
-        return f"Delete {len(paths)} path(s): {listing}. Reason: {reason}"
+        lines, total = [], 0
+        for path in paths[:5]:
+            size = _path_size(path)
+            if size is None:
+                lines.append(f"• {path} (not found on disk)")
+            else:
+                total += size
+                lines.append(f"• {path} ({_human_size(size)})")
+        if len(paths) > 5:
+            lines.append(f"• …and {len(paths) - 5} more")
+        return (f"Delete {len(paths)} path(s) — {_human_size(total)} total:\n"
+                + "\n".join(lines) + f"\nReason: {reason}")
     return f"{name} {json.dumps(input_data)[:300]}"
 
 
