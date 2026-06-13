@@ -16,7 +16,7 @@ from pathlib import Path
 
 from warden.agent.runner import handle_incident
 from warden.backends.replay import ReplayBackend
-from warden.config import Config
+from warden.config import load_config
 from warden.notifier.logchannel import LogChannel
 from warden.store import Store
 
@@ -31,12 +31,13 @@ def _action_matches(expected: dict, taken: list[dict]) -> bool:
 async def run_fixture(path: Path) -> dict:
     fixture = json.loads(path.read_text())
     workdir = Path(tempfile.mkdtemp(prefix=f"warden-eval-{fixture['name']}-"))
-    config = Config(
-        mode="active",
-        state_dir=workdir / "state",
-        incidents_dir=workdir / "incidents",
-        notify_channel="log",
-    )
+    # load_config() so the run uses the configured provider/keys from .env, then
+    # point it at an isolated workdir and force the safety-critical eval settings.
+    config = load_config()
+    config.mode = "active"
+    config.state_dir = workdir / "state"
+    config.incidents_dir = workdir / "incidents"
+    config.notify_channel = "log"
     config.state_dir.mkdir(parents=True)
     store = Store(config.state_dir / "warden.db")
     backend = ReplayBackend(fixture["snapshot"])
