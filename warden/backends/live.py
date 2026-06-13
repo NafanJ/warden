@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from warden.config import Config, path_within
+from warden.config import Config, deletable
 
 
 def _run(cmd: list[str], timeout: int = 30) -> str:
@@ -201,8 +201,8 @@ class LiveBackend:
         deleted = []
         for raw in paths:
             p = Path(raw).resolve()
-            if not path_within(str(p), self.config.delete_roots):
-                raise PermissionError(f"refusing to delete outside allowed roots: {p}")
+            if not deletable(str(p), self.config.delete_roots):
+                raise PermissionError(f"refusing to delete (outside roots or a root itself): {p}")
             if p.is_dir():
                 shutil.rmtree(p)
             else:

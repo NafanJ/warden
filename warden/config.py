@@ -71,15 +71,17 @@ def _csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
-def path_within(path: str, roots: list[str]) -> bool:
-    """True if `path` resolves to inside one of the allowed root trees."""
+def deletable(path: str, roots: list[str]) -> bool:
+    """True only if `path` is strictly inside one of the allowed root trees — a
+    descendant, never a root directory itself. So warden can clean files within
+    the downloads tree but can never be asked to wipe a whole root."""
     try:
         rp = str(Path(path).resolve())
     except OSError:
         return False
     for root in roots:
         rr = str(Path(root).resolve())
-        if rp == rr or rp.startswith(rr + "/"):
+        if rp.startswith(rr + "/"):  # strict descendant (excludes rr itself)
             return True
     return False
 

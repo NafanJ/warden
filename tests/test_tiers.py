@@ -62,8 +62,18 @@ async def test_delete_outside_roots_denied_not_queued(config, store, channel):
     args = {"paths": ["/mnt/Modi/found.001"], "reason": "junk"}  # outside downloads tree
     result = await handler("mcp__warden__delete_paths", args, None)
     assert result.behavior == "deny"
-    assert "recommend" in result.message.lower() or "outside" in result.message.lower()
+    assert "not be deleted" in result.message.lower() or "recommend" in result.message.lower()
     # crucially: not queued, owner not pinged about an un-executable delete
+    assert store.find_pending_action("delete_paths", args) is None
+    assert channel.sent == []
+
+
+async def test_delete_of_a_whole_root_denied(config, store, channel):
+    handler = handler_for(config, store, channel)
+    # the root tree itself must never be a delete target, even though it's "within"
+    args = {"paths": ["/mnt/Modi/Kodi/downloads/"], "reason": "free space"}
+    result = await handler("mcp__warden__delete_paths", args, None)
+    assert result.behavior == "deny"
     assert store.find_pending_action("delete_paths", args) is None
     assert channel.sent == []
 

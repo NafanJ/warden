@@ -17,7 +17,7 @@ from typing import Any
 
 from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 
-from warden.config import Config, path_within
+from warden.config import Config, deletable
 from warden.notifier import Channel
 from warden.store import Store
 
@@ -109,15 +109,17 @@ def decide_tool(config: Config, store: Store, channel: Channel,
     # pinged about a deletion that could never execute — and tell the agent to
     # recommend it in the report instead.
     if bare_name(tool_name) == "delete_paths":
-        outside = [p for p in input_data.get("paths", [])
-                   if not path_within(p, config.delete_roots)]
-        if outside:
+        blocked = [p for p in input_data.get("paths", [])
+                   if not deletable(p, config.delete_roots)]
+        if blocked:
             store.audit(tool_name, input_data, tier, "denied", incident_id)
             return False, (
-                f"warden may only delete within {', '.join(config.delete_roots)}. "
-                f"These paths are outside that and will NOT be deleted: {', '.join(outside)}. "
-                "Do not call delete_paths on them — instead list them as manual "
-                "recommendations under '## Proposed actions' in your report.")
+                f"warden may only delete individual files/folders *inside* "
+                f"{', '.join(config.delete_roots)} (never a whole root tree). "
+                f"These will NOT be deleted: {', '.join(blocked)}. "
+                "Do not call delete_paths on them — target specific stale items "
+                "inside the downloads tree, or list these as manual recommendations "
+                "under '## Proposed actions' in your report.")
 
     if config.mode == "dry-run":
         store.audit(tool_name, input_data, tier, "denied", incident_id)
