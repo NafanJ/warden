@@ -114,6 +114,24 @@ Modes: `detect` (sentinel only, notifications, no LLM) → `dry-run` (agent
 investigates and writes reports, cannot act) → `active` (Tier 1 autonomous,
 Tier 2 via approval). Promote when the reports earn your trust.
 
+## Roadmap
+
+Next up — closing the **silent-failure** gap (a container that reads `running` but is
+actually unhealthy), mostly new sentinel rules over signals warden already collects:
+
+- **OOM detection** — flag containers the kernel OOM-killed (exit 137 / `OOMKilled`) and
+  host memory pressure (low `MemAvailable`, heavy swap). The `oom` incident category is
+  already defined; it just needs the rule. Matters on a RAM-constrained N150 running 20
+  containers — something gets OOM-killed, silently bounces, and the basic up/down check
+  never notices.
+- **Restart-loop detection** — catch a container crash-looping: a climbing `RestartCount`
+  between sentinel cycles (or very short uptime) means it's thrashing even though it looks
+  `running` at any single glance.
+
+Also on the list: **post-fix verification** (confirm a restart actually brought a
+container back healthy, not just that it was issued), a **weekly rollup**, and a
+**self-watchdog** (push a heartbeat to Uptime Kuma so a dead warden surfaces).
+
 ## Stack
 
 Python · OpenAI (`gpt-4o-mini`) or [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
