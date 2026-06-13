@@ -60,7 +60,9 @@ class ReplayBackend:
         return self.snapshot.get("arr_queue", {}).get(app, [])
 
     def arr_blocklist_and_research(self, app: str, queue_ids: list[int]) -> str:
-        return self._record("arr_blocklist_and_research", app=app, queue_ids=queue_ids)
+        # record under the tool name (arr_blocklist_research), which is the
+        # vocabulary the agent and the eval fixtures use — not the backend method name.
+        return self._record("arr_blocklist_research", app=app, queue_ids=queue_ids)
 
     # --- network ---
     def check_urls(self, urls: list[str]) -> list[dict[str, Any]]:
