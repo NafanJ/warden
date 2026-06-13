@@ -11,7 +11,10 @@ from dotenv import load_dotenv
 @dataclass
 class Config:
     mode: str = "dry-run"  # detect | dry-run | active
-    model: str = "claude-sonnet-4-6"
+    llm_provider: str = "openai"  # openai | claude
+    model: str = "claude-sonnet-4-6"  # used when llm_provider == claude
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"  # used when llm_provider == openai
     max_budget_usd: float = 1.0
 
     state_dir: Path = Path("state")
@@ -47,6 +50,7 @@ class Config:
         """Every value that must never appear in a report or notification."""
         candidates = [
             os.environ.get("ANTHROPIC_API_KEY", ""),
+            self.openai_api_key,
             self.sonarr_api_key,
             self.radarr_api_key,
             self.transmission_pass,
@@ -67,7 +71,10 @@ def load_config(env_file: str | Path | None = None) -> Config:
     e = os.environ.get
     return Config(
         mode=e("WARDEN_MODE", "dry-run"),
+        llm_provider=e("LLM_PROVIDER", "openai"),
         model=e("WARDEN_MODEL", "claude-sonnet-4-6"),
+        openai_api_key=e("OPENAI_API_KEY", ""),
+        openai_model=e("OPENAI_MODEL", "gpt-4o-mini"),
         max_budget_usd=float(e("WARDEN_MAX_BUDGET_USD", "1.0")),
         state_dir=Path(e("WARDEN_STATE_DIR", "state")),
         incidents_dir=Path(e("WARDEN_INCIDENTS_DIR", "incidents")),

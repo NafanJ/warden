@@ -2,7 +2,8 @@
 diagnosis + action choice.
 
 Usage:  python -m evals.run [fixture-name ...]
-Needs ANTHROPIC_API_KEY (each fixture is one real agent run).
+Needs the configured LLM key (OPENAI_API_KEY by default, or ANTHROPIC for
+LLM_PROVIDER=claude) — each fixture is one real agent run.
 """
 from __future__ import annotations
 

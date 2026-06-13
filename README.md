@@ -16,7 +16,7 @@ is the point: not a demo, a production log.
 ```
 ┌──────────┐  anomaly   ┌─────────────────────┐  report   ┌────────────┐
 │ sentinel  │──────────▶│ agent                │──────────▶│ incidents/ │
-│ (cron,    │           │ (Claude Agent SDK,   │           └────────────┘
+│ (cron,    │           │ (OpenAI / Claude,    │           └────────────┘
 │  no LLM)  │           │  custom tools only)  │
 └──────────┘           └──────────┬───────────┘
                             Tier 2 │ approval needed
@@ -32,9 +32,11 @@ is the point: not a demo, a production log.
   signals (container health, disk, download queues, public URL reachability), applies
   threshold rules. Green path costs $0.00 and one heartbeat line. Anomalies open
   incidents and wake the agent.
-- **Agent** — one Claude Agent SDK session per incident. It has **no shell and no file
-  access** — only 15 purpose-built tools wrapping Docker, the *arr APIs, Transmission
-  RPC, and the filesystem, every one of them routed through a permission gate.
+- **Agent** — one function-calling session per incident, powered by **OpenAI
+  (`gpt-4o-mini` by default) or the Claude Agent SDK**, selected with `LLM_PROVIDER`.
+  It has **no shell and no file access** — only 15 purpose-built tools wrapping Docker,
+  the *arr APIs, Transmission RPC, and the filesystem, every one routed through the same
+  permission gate regardless of provider.
 - **Approvals** — the owner approves pending action #42 by tapping a ✅ reaction
   (or typing `YES 42`; `NO 42`/❌ cancels). Two transports, same `handle_reply` logic:
   a **Discord** bot that *polls* for reactions/replies (recommended — no public
@@ -88,6 +90,6 @@ Tier 2 via approval). Promote when the reports earn your trust.
 
 ## Stack
 
-Python · [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
+Python · OpenAI (`gpt-4o-mini`) or [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
 (`claude-sonnet-4-6`) · FastAPI · SQLite · Discord bot / WhatsApp Cloud API ·
 systemd · Cloudflare Tunnel

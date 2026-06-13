@@ -44,15 +44,12 @@ container names, log lines. The report is public — no secrets, no API keys.
 """
 
 
-async def handle_incident(incident_id: int, config: Config, backend: Backend,
-                          store: Store, channel: Channel | None = None) -> dict[str, Any]:
-    channel = channel or get_channel(config)
-    incident_file = config.state_dir / "incidents" / f"{incident_id}.json"
-    incident = json.loads(incident_file.read_text())
-
-    run_result: dict[str, Any] = {}
+async def _run_claude_agent(prompt_text: str, config: Config, backend: Backend,
+                            store: Store, channel: Channel, incident_id: int | None,
+                            run_result: dict[str, Any]) -> tuple[str, float | None]:
+    """Claude Agent SDK path: tools as an in-process MCP server, the permission
+    gate as can_use_tool."""
     server = build_warden_server(backend, config, store, incident_id, run_result)
-
     options = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
         model=config.model,
@@ -64,6 +61,26 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
         cwd=str(config.state_dir),
     )
 
+    async def prompt_stream():
+        # can_use_tool requires streaming-mode input (an async iterable), not a string.
+        yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
+
+    result_text, cost = "", None
+    async for message in query(prompt=prompt_stream(), options=options):
+        if isinstance(message, ResultMessage):
+            result_text = message.result or ""
+            cost = getattr(message, "total_cost_usd", None)
+    return result_text, cost
+
+
+async def handle_incident(incident_id: int, config: Config, backend: Backend,
+                          store: Store, channel: Channel | None = None) -> dict[str, Any]:
+    channel = channel or get_channel(config)
+    incident_file = config.state_dir / "incidents" / f"{incident_id}.json"
+    incident = json.loads(incident_file.read_text())
+
+    run_result: dict[str, Any] = {}
+
     prompt_text = (
         f"Incident #{incident_id} ({incident['category']}): {incident['summary']}\n\n"
         f"Trigger details:\n{json.dumps(incident['details'], indent=2, default=str)}\n\n"
@@ -72,16 +89,13 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
         f"Mode: {config.mode}. Investigate and handle this incident now."
     )
 
-    async def prompt_stream():
-        # can_use_tool (warden's permission gate) requires streaming-mode input,
-        # so the prompt must be an async iterable of message dicts, not a string.
-        yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
-
-    result_text, cost = "", None
-    async for message in query(prompt=prompt_stream(), options=options):
-        if isinstance(message, ResultMessage):
-            result_text = message.result or ""
-            cost = getattr(message, "total_cost_usd", None)
+    if config.llm_provider == "openai":
+        from warden.agent.openai_runner import run_openai_agent
+        result_text, cost = run_openai_agent(
+            prompt_text, SYSTEM_PROMPT, config, backend, store, channel, incident_id, run_result)
+    else:
+        result_text, cost = await _run_claude_agent(
+            prompt_text, config, backend, store, channel, incident_id, run_result)
 
     if "report_path" not in run_result:
         # agent failed to call write_report — preserve whatever it concluded

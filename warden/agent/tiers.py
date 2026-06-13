@@ -58,64 +58,68 @@ def describe_action(tool_name: str, input_data: dict[str, Any]) -> str:
     return f"{name} {json.dumps(input_data)[:300]}"
 
 
+def decide_tool(config: Config, store: Store, channel: Channel,
+                incident_id: int | None, tool_name: str,
+                input_data: dict[str, Any]) -> tuple[bool, str]:
+    """The safety gate, provider-agnostic. Returns (allowed, message): when
+    denied, `message` is the explanation fed back to the model. Used directly by
+    the OpenAI loop and wrapped by make_permission_handler for the Claude SDK."""
+    tier = tier_of(tool_name, input_data)
+
+    if tier is None:
+        store.audit(tool_name, input_data, -1, "denied", incident_id)
+        return False, "Tool not in warden's registry. Use only the warden tools provided."
+
+    if tier == 0:
+        store.audit(tool_name, input_data, 0, "allowed", incident_id)
+        return True, ""
+
+    if config.mode == "dry-run":
+        store.audit(tool_name, input_data, tier, "denied", incident_id)
+        return False, ("Dry-run mode: action not executed. Record what you *would* do "
+                       "in your report under 'Proposed actions'.")
+
+    if tier == 1:
+        store.audit(tool_name, input_data, 1, "allowed", incident_id)
+        return True, ""
+
+    # Tier 2: only allowed if this exact action was already approved
+    approved = store.find_approved_action(bare_name(tool_name), input_data)
+    if approved:
+        store.audit(tool_name, input_data, 2, "allowed", incident_id)
+        store.mark_executed(approved["id"], "executed by agent after approval")
+        return True, ""
+
+    pending = store.find_pending_action(bare_name(tool_name), input_data)
+    if pending:
+        store.audit(tool_name, input_data, 2, "denied", incident_id)
+        return False, (f"Identical action already pending approval (#{pending['id']}). "
+                       "Do not retry; note it in your report.")
+
+    description = describe_action(tool_name, input_data)
+    action_id = store.queue_action(incident_id, bare_name(tool_name), input_data, 2, description)
+    store.audit(tool_name, input_data, 2, "queued", incident_id)
+    ref = channel.send_approval(
+        action_id,
+        f"🛡️ warden needs approval (action #{action_id}, incident #{incident_id}):\n"
+        f"{description}\n\nTap ✅ to approve or ❌ to reject "
+        f"(or reply YES {action_id} / NO {action_id})."
+    )
+    if ref:
+        store.set_action_notify_ref(action_id, ref)
+    return False, (f"Destructive action queued for owner approval as action #{action_id}. "
+                   "Do not retry it. Finish your investigation and note the pending "
+                   "action in your report.")
+
+
 def make_permission_handler(config: Config, store: Store, channel: Channel,
                             incident_id: int | None):
-    """Returns the can_use_tool callback for one agent run."""
+    """Wrap decide_tool as the Claude Agent SDK's can_use_tool callback."""
 
     async def handler(tool_name: str, input_data: dict[str, Any], context: Any):
-        tier = tier_of(tool_name, input_data)
-
-        if tier is None:
-            store.audit(tool_name, input_data, -1, "denied", incident_id)
-            return PermissionResultDeny(
-                message="Tool not in warden's registry. Use only the warden tools provided."
-            )
-
-        if tier == 0:
-            store.audit(tool_name, input_data, 0, "allowed", incident_id)
+        allowed, message = decide_tool(config, store, channel, incident_id, tool_name, input_data)
+        if allowed:
             return PermissionResultAllow(updated_input=input_data)
-
-        if config.mode == "dry-run":
-            store.audit(tool_name, input_data, tier, "denied", incident_id)
-            return PermissionResultDeny(
-                message="Dry-run mode: action not executed. Record what you *would* do "
-                        "in your report under 'Proposed actions'."
-            )
-
-        if tier == 1:
-            store.audit(tool_name, input_data, 1, "allowed", incident_id)
-            return PermissionResultAllow(updated_input=input_data)
-
-        # Tier 2: only allowed if this exact action was already approved
-        approved = store.find_approved_action(bare_name(tool_name), input_data)
-        if approved:
-            store.audit(tool_name, input_data, 2, "allowed", incident_id)
-            store.mark_executed(approved["id"], "executed by agent after approval")
-            return PermissionResultAllow(updated_input=input_data)
-
-        pending = store.find_pending_action(bare_name(tool_name), input_data)
-        if pending:
-            store.audit(tool_name, input_data, 2, "denied", incident_id)
-            return PermissionResultDeny(
-                message=f"Identical action already pending approval (#{pending['id']}). "
-                        "Do not retry; note it in your report."
-            )
-
-        description = describe_action(tool_name, input_data)
-        action_id = store.queue_action(incident_id, bare_name(tool_name), input_data, 2, description)
-        store.audit(tool_name, input_data, 2, "queued", incident_id)
-        ref = channel.send_approval(
-            action_id,
-            f"🛡️ warden needs approval (action #{action_id}, incident #{incident_id}):\n"
-            f"{description}\n\nTap ✅ to approve or ❌ to reject "
-            f"(or reply YES {action_id} / NO {action_id})."
-        )
-        if ref:
-            store.set_action_notify_ref(action_id, ref)
-        return PermissionResultDeny(
-            message=f"Destructive action queued for owner approval as action #{action_id}. "
-                    "Do not retry it. Finish your investigation and note the pending "
-                    "action in your report."
-        )
+        return PermissionResultDeny(message=message)
 
     return handler
