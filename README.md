@@ -131,9 +131,16 @@ actually unhealthy), mostly new sentinel rules over signals warden already colle
   between sentinel cycles (or very short uptime) means it's thrashing even though it looks
   `running` at any single glance.
 
-Also on the list: **post-fix verification** (confirm a restart actually brought a
-container back healthy, not just that it was issued), a **weekly rollup**, and a
-**self-watchdog** (push a heartbeat to Uptime Kuma so a dead warden surfaces).
+Also on the list:
+
+- **Conversational `diagnose`** — reply to a diagnose answer in Discord and warden
+  continues the *same* investigation with full context, instead of starting fresh
+  (reply-detection via the message reference + a persisted agent conversation with a TTL).
+- **Post-fix verification** — confirm a restart actually brought a container back healthy,
+  not just that the restart was issued.
+- **Weekly rollup** — the daily summary's bigger sibling (incident counts by category,
+  MTTR, cost trend).
+- **Self-watchdog** — push a heartbeat to Uptime Kuma so a dead warden surfaces.
 
 ## Stack
 
