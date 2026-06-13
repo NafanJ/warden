@@ -27,6 +27,7 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
 
     containers = snapshot.get("docker_ps") or []
     up = sum(1 for c in containers if (c.get("state") or "").lower() == "running")
+    down = [c.get("name") for c in containers if (c.get("state") or "").lower() != "running"]
 
     def q(sql: str, *a) -> list[dict]:
         return [dict(r) for r in store.conn.execute(sql, a).fetchall()]
@@ -36,19 +37,59 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
     tier1 = q("SELECT * FROM audit WHERE ts >= ? AND decision='allowed' AND tier >= 1", since)
 
     return {
+        # at-a-glance live state (used by both views)
         "date": now.astimezone().strftime("%a %d %b"),
+        "now": now.astimezone().strftime("%d %b %H:%M"),
         "containers_up": up,
         "containers_total": len(containers),
+        "containers_down": [d for d in down if d],
         "disk": snapshot.get("disk_usage") or [],
         "torrents": len(snapshot.get("torrents") or []),
         "stalled": sum(1 for a in anomalies if a.category == "stalled_download"),
+        "collector_errors": snapshot.get("collector_errors") or {},
+        # real-time (for `status`): what the sentinel would flag right now + waiting on you
+        "anomalies": [{"category": a.category, "summary": a.summary} for a in anomalies],
+        "pending": [dict(r) for r in
+                    store.conn.execute("SELECT * FROM actions WHERE status='pending' ORDER BY id")],
+        # last-24h rollup (for the daily summary)
         "incidents": incidents,
         "actions": actions,
         "tier1": tier1,
         "cost": round(sum((i.get("cost_usd") or 0) for i in incidents), 4),
         "unresolved": store.unresolved_incidents(),
-        "collector_errors": snapshot.get("collector_errors") or {},
     }
+
+
+def _disk_line(g: dict[str, Any]) -> str:
+    return "  ·  ".join(
+        f"{d['path']} {d['used_pct']}%" + (" ⚠️" if d.get("used_pct", 0) >= 92 else "")
+        for d in g["disk"]
+    ) or "n/a"
+
+
+def format_status(g: dict[str, Any]) -> str:
+    """Real-time health: current state + what the sentinel would flag *now* +
+    anything waiting on the owner. (The daily rollup lives in format_summary.)"""
+    down = g["containers_down"]
+    lines = [
+        f"📡 **warden status — {g['now']}**",
+        f"Containers:  {g['containers_up']}/{g['containers_total']} up"
+        + (f"  ⚠️ down: {', '.join(down)}" if down else ""),
+        f"Disk:        {_disk_line(g)}",
+        f"Downloads:   {g['torrents']} torrent(s), {g['stalled']} stalled",
+        "",
+    ]
+    if g["anomalies"]:
+        lines.append(f"**Active issues ({len(g['anomalies'])}):**")
+        lines += [f"  ⚠️ {a['summary']}" for a in g["anomalies"][:8]]
+    else:
+        lines.append("**Active issues:** none — all clear ✅")
+    if g["pending"]:
+        lines.append(f"**Awaiting your ✅ ({len(g['pending'])}):**")
+        lines += [f"  • #{a['id']} {a['description']}" for a in g["pending"][:4]]
+    if g["collector_errors"]:
+        lines.append(f"⚠️ monitoring gap: {', '.join(g['collector_errors'])} unreachable")
+    return "\n".join(lines)
 
 
 def is_notable(g: dict[str, Any]) -> bool:
@@ -57,10 +98,7 @@ def is_notable(g: dict[str, Any]) -> bool:
 
 
 def format_summary(g: dict[str, Any], label: str = "daily") -> str:
-    disk = "  ·  ".join(
-        f"{d['path']} {d['used_pct']}%" + (" ⚠️" if d.get("used_pct", 0) >= 92 else "")
-        for d in g["disk"]
-    ) or "n/a"
+    disk = _disk_line(g)
     lines = [
         f"📊 **warden {label} — {g['date']}**",
         f"Containers:  {g['containers_up']}/{g['containers_total']} up",

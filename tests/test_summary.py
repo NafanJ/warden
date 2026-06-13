@@ -1,6 +1,6 @@
 """Daily summary: the deterministic gather + format (no LLM, no network)."""
 from warden.backends.replay import ReplayBackend
-from warden.summary import format_summary, gather, is_notable
+from warden.summary import format_status, format_summary, gather, is_notable
 
 SNAP = {
     "docker_ps": [{"name": "plex", "state": "running", "status": "Up"},
@@ -29,6 +29,25 @@ def test_notable_day_with_cost_and_needs_you(config, store):
     assert g["cost"] == 0.01
     text = format_summary(g)
     assert "Needs you" in text and "/mnt/Modi at 93.8%" in text
+
+
+def test_status_shows_active_issues_not_rollup(config, store):
+    # a disk over threshold + a down container should appear as live issues
+    snap = {**SNAP, "docker_ps": [{"name": "plex", "state": "exited", "status": "Exited (1)"}]}
+    g = gather(config, ReplayBackend(snap), store)
+    text = format_status(g)
+    assert "warden status" in text
+    assert "down: plex" in text                         # live container state
+    assert "Active issues" in text and "93.8%" in text  # what the sentinel flags now
+    assert "Agent cost" not in text and "auto-fix" not in text  # no 24h rollup
+
+
+def test_status_all_clear_when_healthy(config, store):
+    snap = {"docker_ps": [{"name": "plex", "state": "running", "status": "Up"}],
+            "disk_usage": [{"path": "/", "used_pct": 10.0, "free_gb": 400, "total_gb": 500, "used_gb": 50}],
+            "torrents": []}
+    g = gather(config, ReplayBackend(snap), store)
+    assert "all clear ✅" in format_status(g)
 
 
 def test_resolved_incident_not_in_needs_you(config, store):

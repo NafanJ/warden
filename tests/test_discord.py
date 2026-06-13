@@ -134,7 +134,7 @@ def test_owner_no_rejects(dconfig, store, channel):
 
 # --- on-demand status command ---
 
-def test_status_command_replies_with_digest(dconfig, store, channel):
+def test_status_command_replies_with_realtime_health(dconfig, store, channel):
     backend = ReplayBackend({
         "docker_ps": [{"name": "plex", "state": "running", "status": "Up"}],
         "disk_usage": [{"path": "/mnt/Modi", "used_pct": 93.8, "free_gb": 200,
@@ -142,7 +142,12 @@ def test_status_command_replies_with_digest(dconfig, store, channel):
         "torrents": [],
     })
     process_batch([_msg("9001", "status")], dconfig, backend, store, channel)
-    assert any("warden status" in s for s in channel.sent)
+    reply = channel.sent[0]
+    assert "warden status" in reply
+    # real-time: the live disk pressure shows up as an *active issue right now*,
+    # not as a 24h rollup
+    assert "Active issues" in reply and "93.8%" in reply
+    assert "Agent cost" not in reply  # that's daily-summary material, not status
 
 
 def test_status_command_ignored_from_non_owner(dconfig, store, channel):

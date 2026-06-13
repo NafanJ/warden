@@ -17,7 +17,7 @@ from warden.notifier import Channel, get_channel
 from warden.notifier import discord as dc
 from warden.notifier.discord import fetch_messages
 from warden.store import Store
-from warden.summary import format_summary, gather
+from warden.summary import format_status, gather
 from warden.webhook.approvals import REPLY, handle_reply
 
 POLL_SECONDS = 5
@@ -38,9 +38,9 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
             continue  # only the owner may approve / query
         content = (msg.get("content") or "").strip()
         if content.lower() in ("status", "!status"):
-            # on-demand live digest (same data as the daily summary, no LLM)
+            # on-demand real-time health (current issues + pending approvals, no LLM)
             try:
-                channel.send(format_summary(gather(config, backend, store), label="status"))
+                channel.send(format_status(gather(config, backend, store)))
             except Exception as exc:
                 channel.send(f"warden: couldn't build status — {exc}")
             continue
