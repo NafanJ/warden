@@ -51,7 +51,10 @@ def _now() -> str:
 class Store:
     def __init__(self, db_path: str | Path):
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(db_path))
+        # check_same_thread=False: the webhook's connection is created at import
+        # on the main thread but read/written from request-handler threads. Access
+        # is effectively serialized (low volume), so sharing the connection is safe.
+        self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
         self.conn.commit()
