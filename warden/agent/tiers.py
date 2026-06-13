@@ -104,10 +104,14 @@ def make_permission_handler(config: Config, store: Store, channel: Channel,
         description = describe_action(tool_name, input_data)
         action_id = store.queue_action(incident_id, bare_name(tool_name), input_data, 2, description)
         store.audit(tool_name, input_data, 2, "queued", incident_id)
-        channel.send(
+        ref = channel.send_approval(
+            action_id,
             f"🛡️ warden needs approval (action #{action_id}, incident #{incident_id}):\n"
-            f"{description}\n\nReply YES {action_id} to approve, NO {action_id} to reject."
+            f"{description}\n\nTap ✅ to approve or ❌ to reject "
+            f"(or reply YES {action_id} / NO {action_id})."
         )
+        if ref:
+            store.set_action_notify_ref(action_id, ref)
         return PermissionResultDeny(
             message=f"Destructive action queued for owner approval as action #{action_id}. "
                     "Do not retry it. Finish your investigation and note the pending "

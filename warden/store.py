@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS actions (
     description TEXT,
     created_at TEXT NOT NULL,
     decided_at TEXT,
-    result TEXT
+    result TEXT,
+    notify_ref TEXT                               -- e.g. the Discord message id the owner reacts to
 );
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +58,14 @@ class Store:
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Additive migrations for DBs created before a column existed."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(actions)")}
+        if "notify_ref" not in cols:
+            self.conn.execute("ALTER TABLE actions ADD COLUMN notify_ref TEXT")
 
     # --- incidents ---
     def open_incident(self, key: str, category: str, summary: str) -> int:
@@ -100,6 +108,19 @@ class Store:
         )
         self.conn.commit()
         return cur.lastrowid
+
+    def set_action_notify_ref(self, action_id: int, ref: str) -> None:
+        """Record the notification message (e.g. Discord message id) whose
+        reactions stand in for an approval reply."""
+        self.conn.execute("UPDATE actions SET notify_ref=? WHERE id=?", (ref, action_id))
+        self.conn.commit()
+
+    def pending_actions(self) -> list[dict[str, Any]]:
+        self._expire_stale()
+        rows = self.conn.execute(
+            "SELECT * FROM actions WHERE status='pending' ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_action(self, action_id: int) -> dict[str, Any] | None:
         self._expire_stale()

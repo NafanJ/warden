@@ -35,10 +35,11 @@ is the point: not a demo, a production log.
 - **Agent** — one Claude Agent SDK session per incident. It has **no shell and no file
   access** — only 15 purpose-built tools wrapping Docker, the *arr APIs, Transmission
   RPC, and the filesystem, every one of them routed through a permission gate.
-- **Approvals** — the owner replies `YES 42` to execute pending action #42, `NO 42`
-  to cancel. Two transports, same `handle_reply` logic: a **Discord** bot that *polls*
-  for replies (recommended — no public endpoint, ~5-min setup, see `DISCORD_SETUP.md`),
-  or a **WhatsApp** webhook (FastAPI behind a Cloudflare Tunnel, `WHATSAPP_SETUP.md`).
+- **Approvals** — the owner approves pending action #42 by tapping a ✅ reaction
+  (or typing `YES 42`; `NO 42`/❌ cancels). Two transports, same `handle_reply` logic:
+  a **Discord** bot that *polls* for reactions/replies (recommended — no public
+  endpoint, ~5-min setup, see `DISCORD_SETUP.md`), or a **WhatsApp** webhook (FastAPI
+  behind a Cloudflare Tunnel, `WHATSAPP_SETUP.md`).
 
 ## The safety model
 

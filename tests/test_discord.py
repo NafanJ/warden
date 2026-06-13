@@ -8,8 +8,9 @@ import httpx
 import pytest
 
 from warden.backends.replay import ReplayBackend
-from warden.notifier.discord import API, DiscordChannel
-from warden.notifier.discord_poller import process_batch
+from warden.notifier import discord as dc
+from warden.notifier.discord import API, APPROVE_EMOJI, REJECT_EMOJI, DiscordChannel
+from warden.notifier.discord_poller import process_batch, process_reactions
 
 OWNER = "owner-111"
 OTHER = "stranger-999"
@@ -43,7 +44,7 @@ def test_send_posts_to_channel_with_bot_auth(dconfig, monkeypatch):
 
     def fake_post(url, headers=None, json=None, timeout=None):
         captured.update(url=url, headers=headers, json=json)
-        return httpx.Response(200, request=httpx.Request("POST", url))
+        return httpx.Response(200, json={"id": "m-0"}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx, "post", fake_post)
     DiscordChannel(dconfig).send("hello")
@@ -110,3 +111,85 @@ def test_owner_no_rejects(dconfig, store, channel):
     process_batch([_msg("6006", f"NO {aid}")], dconfig, backend, store, channel)
     assert store.get_action(aid)["status"] == "denied"
     assert backend.actions_taken == []
+
+
+# --- send_approval seeds reactions ---
+
+def test_send_approval_posts_and_seeds_both_reactions(dconfig, monkeypatch):
+    calls = {"reactions": []}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        return httpx.Response(200, json={"id": "msg-77"}, request=httpx.Request("POST", url))
+
+    def fake_put(url, headers=None, timeout=None):
+        calls["reactions"].append(url)
+        return httpx.Response(204, request=httpx.Request("PUT", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "put", fake_put)
+    ref = DiscordChannel(dconfig).send_approval(7, "approve?")
+    assert ref == "msg-77"
+    # both ✅ and ❌ seeded on the posted message
+    assert len(calls["reactions"]) == 2
+    assert all("/messages/msg-77/reactions/" in u for u in calls["reactions"])
+
+
+# --- reaction-based approval (one tap) ---
+
+def _stub_reactions(monkeypatch, approve_users=(), reject_users=()):
+    def fake(config, message_id, emoji):
+        return set(approve_users) if emoji == APPROVE_EMOJI else set(reject_users)
+    monkeypatch.setattr(dc, "reaction_user_ids", fake)
+    edits = []
+    monkeypatch.setattr(dc, "edit_message",
+                        lambda config, mid, text: edits.append((mid, text)))
+    return edits
+
+
+def test_owner_check_reaction_executes(dconfig, store, channel, monkeypatch):
+    backend = ReplayBackend({})
+    aid = _queue_delete(store)
+    store.set_action_notify_ref(aid, "m-1")
+    edits = _stub_reactions(monkeypatch, approve_users=[OWNER])
+
+    process_reactions(dconfig, backend, store, channel)
+
+    assert store.get_action(aid)["status"] == "executed"
+    assert backend.actions_taken[0]["action"] == "delete_paths"
+    assert edits and edits[0][0] == "m-1" and "Approved" in edits[0][1]
+
+
+def test_owner_cross_reaction_rejects(dconfig, store, channel, monkeypatch):
+    backend = ReplayBackend({})
+    aid = _queue_delete(store)
+    store.set_action_notify_ref(aid, "m-2")
+    edits = _stub_reactions(monkeypatch, reject_users=[OWNER])
+
+    process_reactions(dconfig, backend, store, channel)
+
+    assert store.get_action(aid)["status"] == "denied"
+    assert backend.actions_taken == []
+    assert edits and "Rejected" in edits[0][1]
+
+
+def test_non_owner_reaction_ignored(dconfig, store, channel, monkeypatch):
+    backend = ReplayBackend({})
+    aid = _queue_delete(store)
+    store.set_action_notify_ref(aid, "m-3")
+    _stub_reactions(monkeypatch, approve_users=[OTHER])  # a stranger tapped ✅
+
+    process_reactions(dconfig, backend, store, channel)
+
+    assert store.get_action(aid)["status"] == "pending"
+    assert backend.actions_taken == []
+
+
+def test_no_reaction_leaves_pending(dconfig, store, channel, monkeypatch):
+    backend = ReplayBackend({})
+    aid = _queue_delete(store)
+    store.set_action_notify_ref(aid, "m-4")
+    _stub_reactions(monkeypatch)  # nobody reacted yet (besides the bot's seed)
+
+    process_reactions(dconfig, backend, store, channel)
+
+    assert store.get_action(aid)["status"] == "pending"

@@ -29,6 +29,11 @@ class WhatsAppChannel:
             timeout=30,
         )
 
+    def send_approval(self, action_id: int, text: str) -> str | None:
+        # WhatsApp approvals stay text-based: the owner replies YES/NO <id>.
+        self.send(text)
+        return None
+
     def send(self, text: str) -> None:
         resp = self._post({"type": "text", "text": {"body": text[:4000]}})
         if resp.status_code >= 400:

@@ -19,3 +19,7 @@ class LogChannel:
         stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self.path.open("a") as f:
             f.write(f"--- {stamp} ---\n{text}\n")
+
+    def send_approval(self, action_id: int, text: str) -> str | None:
+        self.send(text)
+        return None

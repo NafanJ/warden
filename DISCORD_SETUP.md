@@ -1,15 +1,18 @@
 # Discord approval channel — setup
 
 warden pings you in a Discord channel before running a **Tier 2 (destructive)**
-action, and executes it only after you reply `YES <id>`. Unlike WhatsApp, there's
-**no public webhook and no tunnel** — a bot *polls* the channel over an outbound
-connection. Setup is ~5 minutes and there's nothing to expose to the internet.
+action, and executes it only after you approve — by **tapping the pre-added ✅
+reaction** (or ❌ to reject), or by typing `YES <id>` / `NO <id>` as a fallback.
+Unlike WhatsApp, there's **no public webhook and no tunnel** — a bot *polls* the
+channel over an outbound connection. Setup is ~5 minutes and there's nothing to
+expose to the internet.
 
 ```
-agent queues Tier 2 action ──▶ bot posts to your channel ("Reply YES 42 …")
-                                        │ you reply "YES 42" in the channel
+agent queues Tier 2 action ──▶ bot posts alert + pre-adds ✅/❌
+                                        │ you tap ✅ (or ❌), or type YES/NO 42
                                         ▼
-            discord poller (outbound poll, no inbound port) ──▶ executes action
+            discord poller (outbound poll, no inbound port) ──▶ executes action,
+                                        then edits the alert to show the outcome
 ```
 
 ## 1. Create the bot
@@ -67,8 +70,10 @@ PY
 ```
 
 The path doesn't exist, so approving it is a no-op (and `delete_paths` is hard-limited
-to the downloads tree regardless). Reply `YES <id>` in the channel; within a few seconds
-the bot replies `warden: action #<id> executed ✅`. Reply `NO <id>` to see a rejection.
+to the downloads tree regardless). The bot posts the alert with **✅ and ❌ already
+attached** — **tap ✅** and within a few seconds it executes and edits the message to
+`✅ Approved — executed`. Tap ❌ (or type `NO <id>`) to reject. Typing `YES <id>` works
+too if you'd rather not tap.
 
 ## Notes
 
@@ -86,6 +91,7 @@ the bot replies `warden: action #<id> executed ✅`. Reply `NO <id>` to see a re
 | Symptom | Likely cause |
 |---------|--------------|
 | Bot posts nothing | `NOTIFY_CHANNEL` not `discord`, or wrong `DISCORD_CHANNEL_ID`, or bot not added to the server. |
-| Replies do nothing | Reply came from a user other than `DISCORD_OWNER_ID`, or **Message Content Intent** is off (step 1.3). |
+| Typed replies do nothing | Reply came from a user other than `DISCORD_OWNER_ID`, or **Message Content Intent** is off (step 1.3). |
+| Tapping ✅/❌ does nothing | `DISCORD_OWNER_ID` not set (reactions need a known owner to attribute the tap), or you tapped a different emoji than the bot pre-added. Reading reactions does **not** require Message Content Intent. |
 | `Discord channel requires DISCORD_BOT_TOKEN…` on startup | `NOTIFY_CHANNEL=discord` but token or channel id is blank. |
 | `401 Unauthorized` in the poller log | Bad/rotated `DISCORD_BOT_TOKEN`. |

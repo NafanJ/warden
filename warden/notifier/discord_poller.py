@@ -14,6 +14,7 @@ from warden.backends import Backend
 from warden.backends.live import LiveBackend
 from warden.config import Config, load_config
 from warden.notifier import Channel, get_channel
+from warden.notifier import discord as dc
 from warden.notifier.discord import fetch_messages
 from warden.store import Store
 from warden.webhook.approvals import REPLY, handle_reply
@@ -41,6 +42,36 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
     return highest
 
 
+def process_reactions(config: Config, backend: Backend, store: Store,
+                      channel: Channel) -> None:
+    """One-tap approvals: check the ✅/❌ reactions the owner left on each pending
+    action's alert message and dispatch them through the same handle_reply path.
+
+    Requires DISCORD_OWNER_ID — without a known owner we can't attribute a
+    reaction to an authorized approver, so reactions are ignored (typed YES/NO
+    with the owner-id check still works).
+    """
+    if not config.discord_owner_id:
+        return
+    for action in store.pending_actions():
+        ref = action.get("notify_ref")
+        if not ref:
+            continue
+        approve = config.discord_owner_id in dc.reaction_user_ids(config, ref, dc.APPROVE_EMOJI)
+        reject = config.discord_owner_id in dc.reaction_user_ids(config, ref, dc.REJECT_EMOJI)
+        if not (approve or reject):
+            continue
+        verb = "YES" if approve else "NO"  # an explicit approve wins a double-tap
+        reply = handle_reply(f"{verb} {action['id']}", config, backend, store, channel)
+        outcome = "✅ Approved" if approve else "❌ Rejected"
+        try:  # edit the original alert in place so the outcome shows where you tapped
+            dc.edit_message(config, ref,
+                            f"🛡️ warden action #{action['id']} — {outcome}\n"
+                            f"{action.get('description') or ''}\n\n{reply}")
+        except Exception as exc:
+            print(f"could not edit approval message {ref}: {exc}")
+
+
 def _starting_cursor(config: Config) -> str | None:
     """Newest existing message id, so we don't act on stale history at boot."""
     messages = fetch_messages(config, limit=1)
@@ -64,6 +95,7 @@ def main() -> int:
             new_cursor = process_batch(messages, config, backend, store, channel)
             if new_cursor:
                 cursor = new_cursor
+            process_reactions(config, backend, store, channel)  # one-tap ✅/❌
         except Exception as exc:  # keep the loop alive across transient API errors
             print(f"poll error: {exc}")
         time.sleep(POLL_SECONDS)
