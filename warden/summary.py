@@ -29,6 +29,13 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
     up = sum(1 for c in containers if (c.get("state") or "").lower() == "running")
     down = [c.get("name") for c in containers if (c.get("state") or "").lower() != "running"]
 
+    plex = {"stream_count": 0, "transcode_count": 0, "bandwidth_mbps": 0.0, "sessions": []}
+    if config.tautulli_api_key:
+        try:
+            plex = backend.tautulli_activity()
+        except Exception:
+            pass
+
     def q(sql: str, *a) -> list[dict]:
         return [dict(r) for r in store.conn.execute(sql, a).fetchall()]
 
@@ -47,6 +54,8 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
         "torrents": len(snapshot.get("torrents") or []),
         "stalled": sum(1 for a in anomalies if a.category == "stalled_download"),
         "collector_errors": snapshot.get("collector_errors") or {},
+        "tautulli": bool(config.tautulli_api_key),
+        "plex": plex,
         # real-time (for `status`): what the sentinel would flag right now + waiting on you
         "anomalies": [{"category": a.category, "summary": a.summary} for a in anomalies],
         "pending": [dict(r) for r in
@@ -77,8 +86,19 @@ def format_status(g: dict[str, Any]) -> str:
         + (f"  ⚠️ down: {', '.join(down)}" if down else ""),
         f"Disk:        {_disk_line(g)}",
         f"Downloads:   {g['torrents']} torrent(s), {g['stalled']} stalled",
-        "",
     ]
+    if g.get("tautulli"):
+        p = g["plex"]
+        head = f"{p['stream_count']} stream(s)"
+        if p["transcode_count"]:
+            head += f", {p['transcode_count']} transcoding"
+        if p["stream_count"]:
+            head += f" · {p['bandwidth_mbps']} Mbps"
+        lines.append(f"Plex:        {head}")
+        for s in p["sessions"][:4]:
+            tag = " (paused)" if s.get("state") == "paused" else ""
+            lines.append(f"  ▶ {s.get('user')}: {s.get('title')}{tag}")
+    lines.append("")
     if g["anomalies"]:
         lines.append(f"**Active issues ({len(g['anomalies'])}):**")
         lines += [f"  ⚠️ {a['summary']}" for a in g["anomalies"][:8]]

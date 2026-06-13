@@ -43,6 +43,9 @@ already imported by the *arr apps, then deleting completed downloads inside the 
 downloads tree. Only escalate to a Tier 2 delete when those aren't enough.
 - If the system denies an action (dry-run mode or pending approval), continue the \
 investigation and record it under '## Proposed actions'.
+- Before restarting Plex, check tautulli_activity — if people are streaming, a \
+restart will be held for owner approval (it interrupts viewers), so prefer it only \
+when Plex is actually broken, and say who's affected.
 - Stay within the incident's scope. Do not touch unrelated services.
 - ALWAYS finish by calling write_report exactly once: title, category, \
 status (resolved | escalated | monitoring), and markdown with sections \
@@ -62,7 +65,7 @@ async def _run_claude_agent(prompt_text: str, config: Config, backend: Backend,
         system_prompt=SYSTEM_PROMPT,
         model=config.model,
         mcp_servers={"warden": server},
-        can_use_tool=make_permission_handler(config, store, channel, incident_id),
+        can_use_tool=make_permission_handler(config, store, channel, incident_id, backend),
         max_turns=40,
         max_budget_usd=config.max_budget_usd,
         setting_sources=[],

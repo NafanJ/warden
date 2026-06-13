@@ -42,6 +42,21 @@ def test_status_shows_active_issues_not_rollup(config, store):
     assert "Agent cost" not in text and "auto-fix" not in text  # no 24h rollup
 
 
+def test_status_shows_plex_activity_when_configured(config, store):
+    config.tautulli_api_key = "set"
+    snap = {**SNAP, "tautulli_activity": {
+        "stream_count": 2, "transcode_count": 1, "bandwidth_mbps": 14.0,
+        "sessions": [{"user": "Tom", "title": "Dune", "state": "playing", "transcode": True}]}}
+    g = gather(config, ReplayBackend(snap), store)
+    text = format_status(g)
+    assert "Plex:" in text and "2 stream" in text and "Tom: Dune" in text
+
+
+def test_status_omits_plex_when_unconfigured(config, store):
+    g = gather(config, ReplayBackend(SNAP), store)  # no tautulli_api_key
+    assert "Plex:" not in format_status(g)
+
+
 def test_status_all_clear_when_healthy(config, store):
     snap = {"docker_ps": [{"name": "plex", "state": "running", "status": "Up"}],
             "disk_usage": [{"path": "/", "used_pct": 10.0, "free_gb": 400, "total_gb": 500, "used_gb": 50}],

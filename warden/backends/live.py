@@ -173,6 +173,43 @@ class LiveBackend:
         resp.raise_for_status()
         return f"blocklisted {len(queue_ids)} item(s) in {app}; re-search will trigger automatically"
 
+    # --- tautulli (plex activity + user stats) ---
+    def _tautulli(self, cmd: str, **params: Any) -> Any:
+        resp = httpx.get(f"{self.config.tautulli_url}/api/v2",
+                         params={"apikey": self.config.tautulli_api_key, "cmd": cmd, **params},
+                         timeout=30)
+        resp.raise_for_status()
+        return resp.json()["response"]["data"]
+
+    def tautulli_activity(self) -> dict[str, Any]:
+        d = self._tautulli("get_activity")
+        return {
+            "stream_count": int(d.get("stream_count") or 0),
+            "transcode_count": int(d.get("stream_count_transcode") or 0),
+            "bandwidth_mbps": round((int(d.get("total_bandwidth") or 0)) / 1000, 1),
+            "sessions": [{
+                "user": s.get("friendly_name"),
+                "title": s.get("full_title"),
+                "state": s.get("state"),
+                "transcode": s.get("transcode_decision") == "transcode",
+            } for s in d.get("sessions", [])],
+        }
+
+    def tautulli_users(self) -> list[dict[str, Any]]:
+        d = self._tautulli("get_users_table", order_column="plays", order_dir="desc", length=100)
+        return [{
+            "user_id": u.get("user_id"),
+            "name": u.get("friendly_name"),
+            "plays": u.get("plays") or 0,
+            "duration_seconds": u.get("duration") or 0,
+            "last_seen": u.get("last_seen"),
+        } for u in d.get("data", []) if u.get("friendly_name") and u.get("user_id")]
+
+    def tautulli_user_stats(self, user_id: int) -> list[dict[str, Any]]:
+        rows = self._tautulli("get_user_watch_time_stats", user_id=user_id)
+        return [{"days": r.get("query_days"), "plays": r.get("total_plays") or 0,
+                 "seconds": r.get("total_time") or 0} for r in rows]
+
     # --- network ---
     def check_urls(self, urls: list[str]) -> list[dict[str, Any]]:
         results = []

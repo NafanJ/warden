@@ -94,7 +94,7 @@ def run_openai_agent(prompt_text: str, system_prompt: str, config: Config,
                     "corrective action, then call write_report now to finish.")})
                 continue
 
-            allowed, deny_msg = decide_tool(config, store, channel, incident_id, name, args)
+            allowed, deny_msg = decide_tool(config, store, channel, incident_id, name, args, backend)
             if allowed:
                 content = openai_tools.execute_tool(
                     name, args, backend=backend, config=config, store=store,

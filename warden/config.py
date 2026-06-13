@@ -27,6 +27,11 @@ class Config:
     transmission_url: str = "http://localhost:9091/transmission/rpc"
     transmission_user: str = ""
     transmission_pass: str = ""
+    tautulli_url: str = "http://localhost:8181"
+    tautulli_api_key: str = ""
+    # containers serving live Plex streams — a restart while people are watching
+    # is escalated to owner approval instead of done autonomously.
+    stream_containers: list[str] = field(default_factory=lambda: ["plex"])
 
     disk_paths: list[str] = field(default_factory=lambda: ["/", "/mnt/Modi"])
     disk_threshold_pct: int = 92
@@ -67,6 +72,7 @@ class Config:
             self.wa_app_secret,
             self.wa_verify_token,
             self.discord_bot_token,
+            self.tautulli_api_key,
         ]
         return [s for s in candidates if s]
 
@@ -109,6 +115,9 @@ def load_config(env_file: str | Path | None = None) -> Config:
         transmission_url=e("TRANSMISSION_URL", "http://localhost:9091/transmission/rpc"),
         transmission_user=e("TRANSMISSION_USER", ""),
         transmission_pass=e("TRANSMISSION_PASS", ""),
+        tautulli_url=e("TAUTULLI_URL", "http://localhost:8181"),
+        tautulli_api_key=e("TAUTULLI_API_KEY", ""),
+        stream_containers=_csv(e("STREAM_CONTAINERS", "plex")),
         disk_paths=_csv(e("DISK_PATHS", "/,/mnt/Modi")),
         disk_threshold_pct=int(e("DISK_THRESHOLD_PCT", "92")),
         incident_cooldown_hours=float(e("INCIDENT_COOLDOWN_HOURS", "6")),

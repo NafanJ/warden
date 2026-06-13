@@ -18,6 +18,7 @@ from warden.notifier import discord as dc
 from warden.notifier.discord import fetch_messages
 from warden.store import Store
 from warden.summary import format_status, gather
+from warden.userstats import handle_userstats
 from warden.webhook.approvals import REPLY, handle_reply
 
 POLL_SECONDS = 5
@@ -37,10 +38,14 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
         if config.discord_owner_id and author_id != config.discord_owner_id:
             continue  # only the owner may approve / query
         content = (msg.get("content") or "").strip()
-        is_status = content.lower() in ("status", "!status")
+        parts = content.split(maxsplit=1)
+        cmd = parts[0].lower() if parts else ""
+        arg = parts[1] if len(parts) > 1 else ""
+        is_status = cmd in ("status", "!status")
+        is_userstats = cmd in ("user-stats", "userstats", "!user-stats")
         is_reply = bool(REPLY.match(content))
-        if not (is_status or is_reply):
-            continue  # ignore ordinary chatter — only status / YES-NO <id>
+        if not (is_status or is_userstats or is_reply):
+            continue  # ignore ordinary chatter — only commands / YES-NO <id>
 
         try:
             dc.trigger_typing(config)  # 'warden is typing…' while it works
@@ -53,6 +58,11 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
                 channel.send(format_status(gather(config, backend, store)))
             except Exception as exc:
                 channel.send(f"warden: couldn't build status — {exc}")
+        elif is_userstats:
+            try:
+                channel.send(handle_userstats(arg, backend))
+            except Exception as exc:
+                channel.send(f"warden: couldn't fetch user stats — {exc}")
         else:
             channel.send(handle_reply(content, config, backend, store, channel))
     return highest

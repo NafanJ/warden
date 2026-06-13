@@ -35,7 +35,7 @@ is the point: not a demo, a production log.
   fix (e.g. a genuinely full disk) from re-alerting every cycle.
 - **Agent** — one function-calling session per incident, powered by **OpenAI
   (`gpt-4o-mini` by default) or the Claude Agent SDK**, selected with `LLM_PROVIDER`.
-  It has **no shell and no file access** — only 16 purpose-built tools wrapping Docker,
+  It has **no shell and no file access** — only 17 purpose-built tools wrapping Docker,
   the *arr APIs, Transmission RPC, and the filesystem, every one routed through the same
   permission gate regardless of provider.
 - **Approvals** — the owner approves pending action #42 by tapping a ✅ reaction
@@ -48,6 +48,9 @@ is the point: not a demo, a production log.
   approvals and agent cost, plus a *Needs you* list of still-unresolved conditions — so
   problems the cooldown is holding quiet don't get forgotten. Free on quiet days; adds a
   short LLM narrative only when something actually happened.
+- **Channel commands** — type `status` for a live health readout (current issues + who's
+  streaming on Plex + pending approvals), or `user-stats [name|all]` for Plex watch
+  stats. Both run through the poller, owner-gated, no LLM.
 
 ## The safety model
 
@@ -64,9 +67,11 @@ alike — not by prompt:
 
 Other guardrails: deletes are hard-limited to files *inside* the downloads tree (never a
 whole root), refused at the gate before they even queue, so the owner is never pinged
-about a deletion that couldn't execute; every report passes a redaction pass (secrets,
-LAN IPs, key-shaped strings) before being committed to this public repo; per-incident
-budget cap; Discord rate-limit (429) backoff.
+about a deletion that couldn't execute; **a Plex restart while people are streaming is
+escalated from autonomous Tier 1 to owner approval** (Tautulli-aware — the prompt names
+how many viewers it would interrupt); every report passes a redaction pass (secrets, LAN
+IPs, key-shaped strings) before being committed to this public repo; per-incident budget
+cap; Discord rate-limit (429) backoff.
 
 ## Evals
 
@@ -113,4 +118,4 @@ Tier 2 via approval). Promote when the reports earn your trust.
 
 Python · OpenAI (`gpt-4o-mini`) or [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
 (`claude-sonnet-4-6`) · FastAPI · SQLite · Discord bot / WhatsApp Cloud API ·
-systemd · Cloudflare Tunnel
+Tautulli (Plex) · systemd · Cloudflare Tunnel

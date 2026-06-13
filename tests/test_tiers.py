@@ -116,6 +116,36 @@ def test_docker_prune_is_tier1():
     assert tier_of("mcp__warden__docker_prune", {}) == 1
 
 
+class _StreamingBackend:
+    def __init__(self, streams): self._streams = streams
+    def tautulli_activity(self):
+        return {"stream_count": self._streams, "transcode_count": 1}
+
+
+async def test_plex_restart_with_viewers_needs_approval(config, store, channel):
+    config.tautulli_api_key = "set"
+    handler = make_permission_handler(config, store, channel, 1, _StreamingBackend(2))
+    result = await handler("mcp__warden__container_restart", {"name": "plex"}, None)
+    assert result.behavior == "deny"  # escalated to approval, not autonomous
+    action = store.find_pending_action("container_restart", {"name": "plex"})
+    assert action is not None
+    assert "interrupt 2 active stream" in channel.sent[0]
+
+
+async def test_plex_restart_no_viewers_is_autonomous(config, store, channel):
+    config.tautulli_api_key = "set"
+    handler = make_permission_handler(config, store, channel, 1, _StreamingBackend(0))
+    result = await handler("mcp__warden__container_restart", {"name": "plex"}, None)
+    assert result.behavior == "allow"  # nobody watching → just restart
+
+
+async def test_non_plex_restart_unaffected_by_streams(config, store, channel):
+    config.tautulli_api_key = "set"
+    handler = make_permission_handler(config, store, channel, 1, _StreamingBackend(5))
+    result = await handler("mcp__warden__container_restart", {"name": "sonarr"}, None)
+    assert result.behavior == "allow"  # sonarr isn't a stream container
+
+
 def test_remove_torrents_with_data_is_tier2():
     assert tier_of("mcp__warden__remove_torrents", {"ids": [1], "delete_data": False}) == 1
     assert tier_of("mcp__warden__remove_torrents", {"ids": [1], "delete_data": True}) == 2

@@ -67,6 +67,18 @@ class ReplayBackend:
         # vocabulary the agent and the eval fixtures use — not the backend method name.
         return self._record("arr_blocklist_research", app=app, queue_ids=queue_ids)
 
+    # --- tautulli ---
+    def tautulli_activity(self) -> dict[str, Any]:
+        return self.snapshot.get("tautulli_activity",
+                                 {"stream_count": 0, "transcode_count": 0,
+                                  "bandwidth_mbps": 0.0, "sessions": []})
+
+    def tautulli_users(self) -> list[dict[str, Any]]:
+        return self.snapshot.get("tautulli_users", [])
+
+    def tautulli_user_stats(self, user_id: int) -> list[dict[str, Any]]:
+        return self.snapshot.get("tautulli_user_stats", {}).get(str(user_id), [])
+
     # --- network ---
     def check_urls(self, urls: list[str]) -> list[dict[str, Any]]:
         return self.snapshot.get("url_checks", [{"url": u, "ok": True, "status": 200} for u in urls])

@@ -127,6 +127,15 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
         except Exception as exc:
             return _error(exc)
 
+    @tool("tautulli_activity",
+          "Current Plex activity from Tautulli: active stream count, transcodes, "
+          "bandwidth, and who is watching what. Check before restarting Plex.", {})
+    async def tautulli_activity(args):
+        try:
+            return _text(backend.tautulli_activity())
+        except Exception as exc:
+            return _error(exc)
+
     @tool("check_urls", "Check reachability of the public service URLs.", {})
     async def check_urls(args):
         try:
@@ -180,7 +189,7 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
     tools = [
         get_containers, container_logs, container_inspect, container_restart,
         docker_prune, disk_usage, du_summary, memory, list_torrents, remove_torrents,
-        arr_queue, arr_blocklist_research, check_urls, list_dir, delete_paths,
-        write_report,
+        arr_queue, arr_blocklist_research, tautulli_activity, check_urls, list_dir,
+        delete_paths, write_report,
     ]
     return create_sdk_mcp_server(name="warden", version="0.1.0", tools=tools)

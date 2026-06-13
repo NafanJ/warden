@@ -61,6 +61,8 @@ TOOL_SCHEMAS: list[dict] = [
         "the *arr app re-searches automatically (Tier 1).",
         {"app": {"type": "string", "enum": ["sonarr", "radarr"]},
          "queue_ids": {"type": "array", "items": {"type": "integer"}}}, ["app", "queue_ids"]),
+    _fn("tautulli_activity", "Current Plex activity from Tautulli: active stream count, "
+        "transcodes, bandwidth, and who is watching what. Check before restarting Plex."),
     _fn("check_urls", "Check reachability of the public service URLs."),
     _fn("list_dir", "List a directory with per-entry sizes (recursive for dirs).",
         {"path": {"type": "string"}}, ["path"]),
@@ -116,6 +118,8 @@ def execute_tool(name: str, args: dict[str, Any], *, backend: Backend, config: C
             return _stringify(backend.arr_queue(args["app"]))
         if name == "arr_blocklist_research":
             return _stringify(backend.arr_blocklist_and_research(args["app"], list(args["queue_ids"])))
+        if name == "tautulli_activity":
+            return _stringify(backend.tautulli_activity())
         if name == "check_urls":
             return _stringify(backend.check_urls(config.public_urls))
         if name == "list_dir":

@@ -19,6 +19,8 @@ def _execute(backend: Backend, tool: str, args: dict[str, Any]) -> str:
         return backend.delete_paths(list(args["paths"]))
     if tool == "remove_torrents":
         return backend.remove_torrents(list(args["ids"]), bool(args.get("delete_data", False)))
+    if tool == "container_restart":  # e.g. a stream-aware Plex restart, once approved
+        return backend.container_restart(args["name"])
     raise ValueError(f"no executor for tool: {tool}")
 
 
