@@ -39,6 +39,10 @@ class Config:
     wa_verify_token: str = ""
     wa_app_secret: str = ""
 
+    discord_bot_token: str = ""
+    discord_channel_id: str = ""
+    discord_owner_id: str = ""
+
     def secrets(self) -> list[str]:
         """Every value that must never appear in a report or notification."""
         candidates = [
@@ -49,6 +53,7 @@ class Config:
             self.wa_token,
             self.wa_app_secret,
             self.wa_verify_token,
+            self.discord_bot_token,
         ]
         return [s for s in candidates if s]
 
@@ -85,4 +90,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         wa_to=e("WA_TO", ""),
         wa_verify_token=e("WA_VERIFY_TOKEN", ""),
         wa_app_secret=e("WA_APP_SECRET", ""),
+        discord_bot_token=e("DISCORD_BOT_TOKEN", ""),
+        discord_channel_id=e("DISCORD_CHANNEL_ID", ""),
+        discord_owner_id=e("DISCORD_OWNER_ID", ""),
     )

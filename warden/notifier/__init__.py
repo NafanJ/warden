@@ -15,5 +15,8 @@ def get_channel(config: Config) -> Channel:
     if config.notify_channel == "whatsapp":
         from warden.notifier.whatsapp import WhatsAppChannel
         return WhatsAppChannel(config)
+    if config.notify_channel == "discord":
+        from warden.notifier.discord import DiscordChannel
+        return DiscordChannel(config)
     from warden.notifier.logchannel import LogChannel
     return LogChannel(config)

@@ -35,8 +35,10 @@ is the point: not a demo, a production log.
 - **Agent** — one Claude Agent SDK session per incident. It has **no shell and no file
   access** — only 15 purpose-built tools wrapping Docker, the *arr APIs, Transmission
   RPC, and the filesystem, every one of them routed through a permission gate.
-- **Webhook** — FastAPI service behind Cloudflare Tunnel receiving WhatsApp replies.
-  `YES 42` executes pending action #42; `NO 42` cancels it.
+- **Approvals** — the owner replies `YES 42` to execute pending action #42, `NO 42`
+  to cancel. Two transports, same `handle_reply` logic: a **Discord** bot that *polls*
+  for replies (recommended — no public endpoint, ~5-min setup, see `DISCORD_SETUP.md`),
+  or a **WhatsApp** webhook (FastAPI behind a Cloudflare Tunnel, `WHATSAPP_SETUP.md`).
 
 ## The safety model
 
@@ -46,7 +48,7 @@ Permissions are enforced **in code** (the SDK's `can_use_tool` callback), not by
 |------|------|--------|
 | 0 | reads: logs, inspect, queues, disk | always allowed, audited |
 | 1 | reversible: restart container, blocklist + re-search a download | autonomous in `active` mode, denied in `dry-run`, audited |
-| 2 | destructive: delete files, remove torrent **with** data | queued in SQLite, owner pinged on WhatsApp, executed only on explicit approval, expires after 12h |
+| 2 | destructive: delete files, remove torrent **with** data | queued in SQLite, owner pinged (Discord/WhatsApp), executed only on explicit approval, expires after 12h |
 | — | anything else (including all built-in SDK tools) | denied by default |
 
 Other guardrails: file deletion is hard-limited to the downloads tree regardless of
@@ -86,5 +88,5 @@ Tier 2 via approval). Promote when the reports earn your trust.
 ## Stack
 
 Python · [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
-(`claude-sonnet-4-6`) · FastAPI · SQLite · WhatsApp Cloud API · systemd ·
-Cloudflare Tunnel
+(`claude-sonnet-4-6`) · FastAPI · SQLite · Discord bot / WhatsApp Cloud API ·
+systemd · Cloudflare Tunnel

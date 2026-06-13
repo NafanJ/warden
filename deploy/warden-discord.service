@@ -1,0 +1,14 @@
+[Unit]
+Description=warden discord poller — approval replies via Discord (no public webhook)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=nathan
+WorkingDirectory=/opt/warden
+ExecStart=/opt/warden/.venv/bin/python -m warden.notifier.discord_poller
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
