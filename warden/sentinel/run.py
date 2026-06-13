@@ -41,6 +41,8 @@ def main() -> int:
     for anomaly in anomalies:
         if store.find_open_incident(anomaly.key):
             continue  # already being handled / awaiting approval
+        if store.find_recent_unresolved(anomaly.key, config.incident_cooldown_hours):
+            continue  # handled recently but unresolved — don't re-investigate/spam
         incident_id = store.open_incident(anomaly.key, anomaly.category, anomaly.summary)
         incident_file = config.state_dir / "incidents" / f"{incident_id}.json"
         incident_file.parent.mkdir(parents=True, exist_ok=True)

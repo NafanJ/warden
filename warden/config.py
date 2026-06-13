@@ -30,6 +30,10 @@ class Config:
 
     disk_paths: list[str] = field(default_factory=lambda: ["/", "/mnt/Modi"])
     disk_threshold_pct: int = 92
+    # Don't re-raise the same anomaly within this window if the last one was left
+    # unresolved (escalated) — prevents re-investigating a persistent condition
+    # (e.g. a full disk warden can't fix) every cycle.
+    incident_cooldown_hours: float = 6.0
     public_urls: list[str] = field(default_factory=list)
     stall_threshold_hours: float = 4.0
     stall_min_age_hours: float = 1.0
@@ -107,6 +111,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         transmission_pass=e("TRANSMISSION_PASS", ""),
         disk_paths=_csv(e("DISK_PATHS", "/,/mnt/Modi")),
         disk_threshold_pct=int(e("DISK_THRESHOLD_PCT", "92")),
+        incident_cooldown_hours=float(e("INCIDENT_COOLDOWN_HOURS", "6")),
         public_urls=_csv(e("PUBLIC_URLS", "")),
         stall_threshold_hours=float(e("STALL_THRESHOLD_HOURS", "4")),
         stall_min_age_hours=float(e("STALL_MIN_AGE_HOURS", "1")),

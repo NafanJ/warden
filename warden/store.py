@@ -82,6 +82,18 @@ class Store:
         ).fetchone()
         return dict(row) if row else None
 
+    def find_recent_unresolved(self, key: str, cooldown_hours: float) -> dict[str, Any] | None:
+        """Most recent incident for `key` that was closed as 'escalated' within the
+        cooldown window — i.e. handled recently but not actually resolved. The
+        sentinel uses this to avoid re-raising a persistent unfixable condition
+        every cycle. A 'resolved' incident does not suppress (a recurrence is news)."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=cooldown_hours)).isoformat()
+        row = self.conn.execute(
+            "SELECT * FROM incidents WHERE key=? AND status='escalated' AND opened_at >= ? "
+            "ORDER BY id DESC LIMIT 1", (key, cutoff)
+        ).fetchone()
+        return dict(row) if row else None
+
     def close_incident(self, incident_id: int, status: str = "resolved",
                        report_path: str | None = None) -> None:
         self.conn.execute(
