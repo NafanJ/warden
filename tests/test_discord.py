@@ -155,6 +155,14 @@ def test_status_command_ignored_from_non_owner(dconfig, store, channel):
     assert channel.sent == []
 
 
+def test_status_shows_typing_indicator(dconfig, store, channel, monkeypatch):
+    typed = []
+    monkeypatch.setattr(dc, "trigger_typing", lambda config: typed.append(True))
+    backend = ReplayBackend({"docker_ps": [], "disk_usage": [], "torrents": []})
+    process_batch([_msg("9101", "status")], dconfig, backend, store, channel)
+    assert typed  # 'warden is typing…' was triggered before the reply
+
+
 # --- send_approval seeds reactions ---
 
 def test_send_approval_posts_and_seeds_both_reactions(dconfig, monkeypatch):

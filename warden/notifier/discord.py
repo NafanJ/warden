@@ -86,6 +86,13 @@ def reaction_user_ids(config: Config, message_id: str, emoji: str) -> set[str]:
     return {str(u["id"]) for u in resp.json()}
 
 
+def trigger_typing(config: Config) -> None:
+    """Show 'warden is typing…' in the channel — clears when the next message is
+    sent (or after ~10s). Best-effort feedback while the bot does live reads."""
+    _request("POST", config.discord_bot_token,
+             f"{API}/channels/{config.discord_channel_id}/typing")
+
+
 def edit_message(config: Config, message_id: str, text: str) -> None:
     _request("PATCH", config.discord_bot_token,
              f"{API}/channels/{config.discord_channel_id}/messages/{message_id}",

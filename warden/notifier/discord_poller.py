@@ -37,16 +37,24 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
         if config.discord_owner_id and author_id != config.discord_owner_id:
             continue  # only the owner may approve / query
         content = (msg.get("content") or "").strip()
-        if content.lower() in ("status", "!status"):
+        is_status = content.lower() in ("status", "!status")
+        is_reply = bool(REPLY.match(content))
+        if not (is_status or is_reply):
+            continue  # ignore ordinary chatter — only status / YES-NO <id>
+
+        try:
+            dc.trigger_typing(config)  # 'warden is typing…' while it works
+        except Exception:
+            pass  # purely cosmetic — never let it block the actual response
+
+        if is_status:
             # on-demand real-time health (current issues + pending approvals, no LLM)
             try:
                 channel.send(format_status(gather(config, backend, store)))
             except Exception as exc:
                 channel.send(f"warden: couldn't build status — {exc}")
-            continue
-        if not REPLY.match(content):
-            continue  # ignore ordinary chatter — only react to YES/NO <id>
-        channel.send(handle_reply(content, config, backend, store, channel))
+        else:
+            channel.send(handle_reply(content, config, backend, store, channel))
     return highest
 
 
