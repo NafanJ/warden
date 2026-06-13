@@ -103,6 +103,19 @@ def test_unregistered_tool_is_denied(config, store, channel):
     assert rows and rows[0][0] == "denied"
 
 
+def test_loop_guard_blocks_repeated_mutation(config, store, channel):
+    # gpt-4o-mini's failure mode: re-issuing the same Tier 1 action. The guard
+    # should execute it once, short-circuit the repeat, and let the run finish.
+    scripted = [
+        _resp(_assistant(tool_calls=[_tc("c1", "container_restart", {"name": "plex"})])),
+        _resp(_assistant(tool_calls=[_tc("c2", "container_restart", {"name": "plex"})])),
+        _resp(_assistant(tool_calls=[_tc("c3", "write_report", REPORT_ARGS)])),
+    ]
+    _, _, _, backend = _run(config, store, channel, scripted)
+    # restarted exactly once despite two identical calls
+    assert backend.actions_taken == [{"action": "container_restart", "name": "plex"}]
+
+
 def test_plain_text_answer_without_tools(config, store, channel):
     scripted = [_resp(_assistant(content="no tools needed"))]
     text, _, run_result, _ = _run(config, store, channel, scripted)

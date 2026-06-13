@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 from warden.agent import openai_tools
-from warden.agent.tiers import decide_tool
+from warden.agent.tiers import decide_tool, tier_of
 from warden.backends import Backend
 from warden.config import Config
 from warden.notifier import Channel
@@ -54,6 +54,7 @@ def run_openai_agent(prompt_text: str, system_prompt: str, config: Config,
     ]
     cost = 0.0
     final_text = ""
+    seen: dict[str, int] = {}  # loop guard: count identical (tool, args) calls
 
     for _ in range(MAX_TURNS):
         resp = client.chat.completions.create(
@@ -78,6 +79,21 @@ def run_openai_agent(prompt_text: str, system_prompt: str, config: Config,
                 args = json.loads(call.function.arguments or "{}")
             except json.JSONDecodeError:
                 args = {}
+
+            # Loop guard: weaker models can thrash, re-issuing the same call.
+            # A mutation (Tier 1/2) should never repeat with identical args; a
+            # read may legitimately be re-checked once, so allow it twice.
+            key = f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
+            seen[key] = seen.get(key, 0) + 1
+            tier = tier_of(name, args)
+            limit = 1 if (tier is not None and tier >= 1) else 2
+            if seen[key] > limit:
+                messages.append({"role": "tool", "tool_call_id": call.id, "content": (
+                    f"Loop guard: you have already called `{name}` with these exact "
+                    "arguments; repeating it changes nothing. Take any remaining single "
+                    "corrective action, then call write_report now to finish.")})
+                continue
+
             allowed, deny_msg = decide_tool(config, store, channel, incident_id, name, args)
             if allowed:
                 content = openai_tools.execute_tool(
