@@ -43,6 +43,9 @@ class Config:
     stall_threshold_hours: float = 4.0
     stall_min_age_hours: float = 1.0
     ignored_containers: list[str] = field(default_factory=list)
+    # The owner doesn't seed: once a torrent is 100% done and no *arr app is
+    # still importing it, warden removes it from Transmission (keeping the data).
+    reap_completed: bool = True
 
     # The only directory trees warden is ever allowed to delete within. Enforced
     # both at the permission gate (so out-of-bounds deletes are never queued) and
@@ -125,6 +128,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         stall_threshold_hours=float(e("STALL_THRESHOLD_HOURS", "4")),
         stall_min_age_hours=float(e("STALL_MIN_AGE_HOURS", "1")),
         ignored_containers=_csv(e("IGNORED_CONTAINERS", "")),
+        reap_completed=e("REAP_COMPLETED_TORRENTS", "true").lower() in ("1", "true", "yes", "on"),
         delete_roots=_csv(e("DELETE_ROOTS", "/mnt/Modi/Kodi/downloads/")),
         notify_channel=e("NOTIFY_CHANNEL", "log"),
         wa_token=e("WA_TOKEN", ""),

@@ -13,7 +13,9 @@ from datetime import datetime, timezone
 from warden.backends.live import LiveBackend
 from warden.config import load_config
 from warden.notifier import get_channel
+from warden.notifier.logchannel import LogChannel
 from warden.sentinel.collectors import collect_snapshot
+from warden.sentinel.reaper import reap_completed_torrents
 from warden.sentinel.rules import evaluate
 from warden.store import Store
 
@@ -27,6 +29,11 @@ def main() -> int:
     snapshot = collect_snapshot(backend, config)
     anomalies = evaluate(snapshot, config)
 
+    # Routine maintenance (deterministic, no LLM): clear finished torrents the
+    # owner doesn't want to keep seeding. Audited, so it shows in the summary.
+    reaped = reap_completed_torrents(config, backend, store, LogChannel(config))
+    reaped_note = f", reaped {len(reaped)} completed torrent(s)" if reaped else ""
+
     heartbeat = config.state_dir / "heartbeat.log"
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     containers = snapshot.get("docker_ps") or []
@@ -34,7 +41,8 @@ def main() -> int:
 
     if not anomalies:
         with heartbeat.open("a") as f:
-            f.write(f"{stamp} OK — {up}/{len(containers)} containers up, no anomalies\n")
+            f.write(f"{stamp} OK — {up}/{len(containers)} containers up, "
+                    f"no anomalies{reaped_note}\n")
         return 0
 
     new_incidents = []
@@ -58,7 +66,7 @@ def main() -> int:
 
     with heartbeat.open("a") as f:
         f.write(f"{stamp} ANOMALY — {len(anomalies)} anomaly(ies), "
-                f"{len(new_incidents)} new incident(s)\n")
+                f"{len(new_incidents)} new incident(s){reaped_note}\n")
 
     if not new_incidents:
         return 0

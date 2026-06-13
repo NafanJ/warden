@@ -33,7 +33,10 @@ is the point: not a demo, a production log.
   external drive — download/torrent state, optional URL reachability), applies threshold
   rules. Green path costs $0.00 and one heartbeat line. Anomalies open
   incidents and wake the agent; a per-key cooldown keeps a persistent condition it can't
-  fix (e.g. a genuinely full disk) from re-alerting every cycle.
+  fix (e.g. a genuinely full disk) from re-alerting every cycle. The same cycle also does
+  routine janitorial work with no LLM: a **completed-torrent reaper** removes any download
+  that's hit 100% and that no *arr app is still importing (data kept on disk — only the
+  seed entry goes), so finished torrents don't pile up seeding forever.
 - **Agent** — one function-calling session per incident, powered by **OpenAI
   (`gpt-4o-mini` by default) or the Claude Agent SDK**, selected with `LLM_PROVIDER`.
   It has **no shell and no file access** — only 18 purpose-built tools wrapping Docker,
