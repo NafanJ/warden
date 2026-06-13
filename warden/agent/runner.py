@@ -64,7 +64,7 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
         cwd=str(config.state_dir),
     )
 
-    prompt = (
+    prompt_text = (
         f"Incident #{incident_id} ({incident['category']}): {incident['summary']}\n\n"
         f"Trigger details:\n{json.dumps(incident['details'], indent=2, default=str)}\n\n"
         f"Sentinel snapshot at detection time:\n"
@@ -72,8 +72,13 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
         f"Mode: {config.mode}. Investigate and handle this incident now."
     )
 
+    async def prompt_stream():
+        # can_use_tool (warden's permission gate) requires streaming-mode input,
+        # so the prompt must be an async iterable of message dicts, not a string.
+        yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
+
     result_text, cost = "", None
-    async for message in query(prompt=prompt, options=options):
+    async for message in query(prompt=prompt_stream(), options=options):
         if isinstance(message, ResultMessage):
             result_text = message.result or ""
             cost = getattr(message, "total_cost_usd", None)
