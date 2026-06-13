@@ -1,0 +1,12 @@
+[Unit]
+Description=warden sentinel — collect signals, open incidents, invoke agent
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nathan
+WorkingDirectory=/opt/warden
+ExecStart=/opt/warden/.venv/bin/python -m warden.sentinel.run
+TimeoutStartSec=900
+Nice=10

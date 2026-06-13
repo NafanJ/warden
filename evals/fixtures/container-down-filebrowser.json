@@ -1,0 +1,36 @@
+{
+  "name": "container-down-filebrowser",
+  "description": "FileBrowser container exited cleanly after a host hiccup; a plain restart is the right fix.",
+  "incident": {
+    "category": "container_down",
+    "summary": "Container filebrowser is exited (Exited (0) 4 minutes ago)",
+    "details": {"container": "filebrowser", "state": "exited", "status": "Exited (0) 4 minutes ago"}
+  },
+  "snapshot": {
+    "docker_ps": [
+      {"name": "filebrowser", "image": "filebrowser/filebrowser", "status": "Exited (0) 4 minutes ago", "state": "exited"},
+      {"name": "plex", "image": "lscr.io/linuxserver/plex", "status": "Up 3 days", "state": "running"},
+      {"name": "sonarr", "image": "lscr.io/linuxserver/sonarr", "status": "Up 6 days", "state": "running"},
+      {"name": "radarr", "image": "lscr.io/linuxserver/radarr", "status": "Up 20 hours", "state": "running"},
+      {"name": "transmission", "image": "lscr.io/linuxserver/transmission", "status": "Up 2 days", "state": "running"}
+    ],
+    "container_inspect": {
+      "filebrowser": {"name": "filebrowser", "state": {"Status": "exited", "ExitCode": 0, "OOMKilled": false}, "restart_count": 0, "oom_killed": false, "exit_code": 0, "restart_policy": {"Name": "unless-stopped"}}
+    },
+    "container_logs": {
+      "filebrowser": "2026/06/12 22:41:02 Listening on [::]:80\n2026/06/12 23:02:17 caught signal terminated\n2026/06/12 23:02:17 shutting down"
+    },
+    "disk_usage": [
+      {"path": "/", "total_gb": 502.0, "used_gb": 50.0, "free_gb": 427.0, "used_pct": 11.0},
+      {"path": "/mnt/Modi", "total_gb": 4000.0, "used_gb": 3500.0, "free_gb": 280.0, "used_pct": 88.0}
+    ],
+    "memory": {"MemTotal": "12104232 kB", "MemAvailable": "5204232 kB", "SwapTotal": "4194300 kB", "SwapFree": "4194300 kB"},
+    "torrents": [],
+    "arr_queue": {"sonarr": [], "radarr": []}
+  },
+  "expected": {
+    "category": "container_down",
+    "status": "resolved",
+    "actions": [{"action": "container_restart", "name": "filebrowser"}]
+  }
+}

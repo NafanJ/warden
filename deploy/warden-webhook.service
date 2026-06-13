@@ -1,0 +1,14 @@
+[Unit]
+Description=warden webhook — WhatsApp approval endpoint
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=nathan
+WorkingDirectory=/opt/warden
+ExecStart=/opt/warden/.venv/bin/uvicorn warden.webhook.app:app --host 127.0.0.1 --port 8484
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

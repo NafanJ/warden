@@ -1,0 +1,67 @@
+import json
+from pathlib import Path
+
+from warden.config import Config
+from warden.sentinel.rules import evaluate
+
+FIXTURES = Path(__file__).parent.parent / "evals" / "fixtures"
+
+
+def cfg(**kwargs) -> Config:
+    return Config(disk_threshold_pct=92, stall_threshold_hours=4,
+                  stall_min_age_hours=1, **kwargs)
+
+
+def snapshot_of(name: str) -> dict:
+    return json.loads((FIXTURES / f"{name}.json").read_text())["snapshot"]
+
+
+def test_container_down_detected():
+    anomalies = evaluate(snapshot_of("container-down-filebrowser"), cfg())
+    keys = [a.key for a in anomalies]
+    assert "container_down:filebrowser" in keys
+
+
+def test_ignored_containers_skipped():
+    anomalies = evaluate(snapshot_of("container-down-filebrowser"),
+                         cfg(ignored_containers=["filebrowser"]))
+    assert not [a for a in anomalies if a.category == "container_down"]
+
+
+def test_disk_pressure_detected():
+    anomalies = evaluate(snapshot_of("disk-pressure"), cfg())
+    disk = [a for a in anomalies if a.category == "disk_pressure"]
+    assert len(disk) == 1
+    assert disk[0].key == "disk_pressure:/mnt/Modi"
+
+
+def test_stall_detected_but_not_healthy_torrent():
+    anomalies = evaluate(snapshot_of("stalled-torrent"), cfg())
+    stalls = [a for a in anomalies if a.category == "stalled_download"]
+    assert len(stalls) == 1
+    assert "Some.Show" in stalls[0].summary
+
+
+def test_fresh_torrent_not_flagged():
+    snap = snapshot_of("stalled-torrent")
+    for t in snap["torrents"]:
+        t["age_hours"] = 0.2  # younger than min age
+    anomalies = evaluate(snap, cfg())
+    assert not [a for a in anomalies if a.category == "stalled_download"]
+
+
+def test_tunnel_down_detected():
+    snap = {"url_checks": [{"url": "https://plex.example.com", "ok": False, "error": "timeout"}]}
+    anomalies = evaluate(snap, cfg())
+    assert [a for a in anomalies if a.category == "tunnel_down"]
+
+
+def test_green_snapshot_no_anomalies():
+    snap = {
+        "docker_ps": [{"name": "plex", "state": "running", "status": "Up 3 days"}],
+        "disk_usage": [{"path": "/", "used_pct": 11.0, "free_gb": 400, "total_gb": 500, "used_gb": 50}],
+        "torrents": [],
+        "arr_queue": {"sonarr": [], "radarr": []},
+        "url_checks": [{"url": "https://plex.example.com", "ok": True, "status": 200}],
+    }
+    assert evaluate(snap, cfg()) == []

@@ -1,0 +1,117 @@
+"""Permission tiers, enforced in code via the SDK's can_use_tool callback.
+
+Tier 0 — reads: always allowed.
+Tier 1 — reversible actions (restart, blocklist+re-search): autonomous in
+         active mode, denied in dry-run. Always audited.
+Tier 2 — destructive actions (delete data): never autonomous. Queued in the
+         store, owner notified over WhatsApp, executed only after approval.
+Anything not in the registry is denied (default-deny), including all of the
+SDK's built-in tools — the agent can only touch the system through warden's
+own backend-wrapped tools.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
+
+from warden.config import Config
+from warden.notifier import Channel
+from warden.store import Store
+
+TIER0 = {
+    "get_containers", "container_logs", "container_inspect", "disk_usage",
+    "du_summary", "memory", "list_torrents", "arr_queue", "check_urls",
+    "list_dir", "write_report",
+}
+TIER1 = {"container_restart", "arr_blocklist_research", "remove_torrents"}
+TIER2 = {"delete_paths"}
+
+
+def bare_name(tool_name: str) -> str:
+    """mcp__warden__container_logs -> container_logs"""
+    return tool_name.split("__")[-1]
+
+
+def tier_of(tool_name: str, input_data: dict[str, Any]) -> int | None:
+    name = bare_name(tool_name)
+    if name in TIER0:
+        return 0
+    if name in TIER1:
+        # removing a torrent *with its data* is destructive, not reversible
+        if name == "remove_torrents" and input_data.get("delete_data"):
+            return 2
+        return 1
+    if name in TIER2:
+        return 2
+    return None
+
+
+def describe_action(tool_name: str, input_data: dict[str, Any]) -> str:
+    name = bare_name(tool_name)
+    if name == "delete_paths":
+        paths = input_data.get("paths", [])
+        reason = input_data.get("reason", "")
+        listing = ", ".join(paths[:5]) + ("…" if len(paths) > 5 else "")
+        return f"Delete {len(paths)} path(s): {listing}. Reason: {reason}"
+    return f"{name} {json.dumps(input_data)[:300]}"
+
+
+def make_permission_handler(config: Config, store: Store, channel: Channel,
+                            incident_id: int | None):
+    """Returns the can_use_tool callback for one agent run."""
+
+    async def handler(tool_name: str, input_data: dict[str, Any], context: Any):
+        tier = tier_of(tool_name, input_data)
+
+        if tier is None:
+            store.audit(tool_name, input_data, -1, "denied", incident_id)
+            return PermissionResultDeny(
+                message="Tool not in warden's registry. Use only the warden tools provided."
+            )
+
+        if tier == 0:
+            store.audit(tool_name, input_data, 0, "allowed", incident_id)
+            return PermissionResultAllow(updated_input=input_data)
+
+        if config.mode == "dry-run":
+            store.audit(tool_name, input_data, tier, "denied", incident_id)
+            return PermissionResultDeny(
+                message="Dry-run mode: action not executed. Record what you *would* do "
+                        "in your report under 'Proposed actions'."
+            )
+
+        if tier == 1:
+            store.audit(tool_name, input_data, 1, "allowed", incident_id)
+            return PermissionResultAllow(updated_input=input_data)
+
+        # Tier 2: only allowed if this exact action was already approved
+        approved = store.find_approved_action(bare_name(tool_name), input_data)
+        if approved:
+            store.audit(tool_name, input_data, 2, "allowed", incident_id)
+            store.mark_executed(approved["id"], "executed by agent after approval")
+            return PermissionResultAllow(updated_input=input_data)
+
+        pending = store.find_pending_action(bare_name(tool_name), input_data)
+        if pending:
+            store.audit(tool_name, input_data, 2, "denied", incident_id)
+            return PermissionResultDeny(
+                message=f"Identical action already pending approval (#{pending['id']}). "
+                        "Do not retry; note it in your report."
+            )
+
+        description = describe_action(tool_name, input_data)
+        action_id = store.queue_action(incident_id, bare_name(tool_name), input_data, 2, description)
+        store.audit(tool_name, input_data, 2, "queued", incident_id)
+        channel.send(
+            f"🛡️ warden needs approval (action #{action_id}, incident #{incident_id}):\n"
+            f"{description}\n\nReply YES {action_id} to approve, NO {action_id} to reject."
+        )
+        return PermissionResultDeny(
+            message=f"Destructive action queued for owner approval as action #{action_id}. "
+                    "Do not retry it. Finish your investigation and note the pending "
+                    "action in your report."
+        )
+
+    return handler

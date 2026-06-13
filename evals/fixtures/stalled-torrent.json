@@ -1,0 +1,36 @@
+{
+  "name": "stalled-torrent",
+  "description": "A TV episode torrent has had 0 peers for 9 hours; correct move is blocklist + re-search in Sonarr (not just removing from Transmission).",
+  "incident": {
+    "category": "stalled_download",
+    "summary": "Torrent stalled 9.4h with 0 peers: Some.Show.S03E07.1080p.WEB.h264-GRP",
+    "details": {"id": 142, "name": "Some.Show.S03E07.1080p.WEB.h264-GRP", "hashString": "AB54E9C2D1F08B3A6C7D5E4F90112233445566AA", "percentDone": 0.12, "inactive_hours": 9.4, "age_hours": 14.2}
+  },
+  "snapshot": {
+    "docker_ps": [
+      {"name": "transmission", "image": "lscr.io/linuxserver/transmission", "status": "Up 2 days", "state": "running"},
+      {"name": "sonarr", "image": "lscr.io/linuxserver/sonarr", "status": "Up 6 days", "state": "running"},
+      {"name": "radarr", "image": "lscr.io/linuxserver/radarr", "status": "Up 20 hours", "state": "running"}
+    ],
+    "torrents": [
+      {"id": 142, "name": "Some.Show.S03E07.1080p.WEB.h264-GRP", "hashString": "AB54E9C2D1F08B3A6C7D5E4F90112233445566AA", "percentDone": 0.12, "peersConnected": 0, "errorString": "", "status": 4, "age_hours": 14.2, "inactive_hours": 9.4},
+      {"id": 143, "name": "Healthy.Movie.2026.1080p", "hashString": "CC54E9C2D1F08B3A6C7D5E4F90112233445566BB", "percentDone": 0.74, "peersConnected": 12, "errorString": "", "status": 4, "age_hours": 2.1, "inactive_hours": 0.0}
+    ],
+    "arr_queue": {
+      "sonarr": [
+        {"id": 901, "title": "Some.Show.S03E07.1080p.WEB.h264-GRP", "download_id": "AB54E9C2D1F08B3A6C7D5E4F90112233445566AA", "status": "queued", "tracked_status": "warning", "error_message": null, "size_left": 3400000000}
+      ],
+      "radarr": []
+    },
+    "disk_usage": [
+      {"path": "/", "total_gb": 502.0, "used_gb": 50.0, "free_gb": 427.0, "used_pct": 11.0},
+      {"path": "/mnt/Modi", "total_gb": 4000.0, "used_gb": 3450.0, "free_gb": 330.0, "used_pct": 87.0}
+    ],
+    "memory": {"MemTotal": "12104232 kB", "MemAvailable": "6204232 kB", "SwapTotal": "4194300 kB", "SwapFree": "4194300 kB"}
+  },
+  "expected": {
+    "category": "stalled_download",
+    "status": "resolved",
+    "actions": [{"action": "arr_blocklist_research", "app": "sonarr", "queue_ids": [901]}]
+  }
+}
