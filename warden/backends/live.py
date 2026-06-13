@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -90,6 +91,35 @@ class LiveBackend:
 
     def du_summary(self, path: str, depth: int = 1) -> str:
         return _run(["du", "-h", f"--max-depth={depth}", path], timeout=300)
+
+    def mount_health(self, paths: list[str]) -> list[dict[str, Any]]:
+        """Per-mount health: is it mounted, accessible, and writable. Catches a
+        USB drive that dropped off or a filesystem the kernel flipped read-only
+        after I/O errors — no root or smartctl needed."""
+        opts: dict[str, list[str]] = {}
+        try:
+            for line in Path("/proc/mounts").read_text().splitlines():
+                parts = line.split()
+                if len(parts) >= 4:
+                    opts[parts[1].replace("\\040", " ")] = parts[3].split(",")
+        except OSError:
+            pass
+        out = []
+        for p in paths:
+            rec: dict[str, Any] = {
+                "path": p,
+                "mounted": p in opts or Path(p).is_mount(),
+                "read_only": "ro" in opts.get(p, []),
+                "accessible": True,
+                "error": None,
+            }
+            try:
+                os.statvfs(p)  # raises on a stale / dropped mount
+            except OSError as exc:
+                rec["accessible"] = False
+                rec["error"] = str(exc)[:120]
+            out.append(rec)
+        return out
 
     def memory(self) -> dict[str, Any]:
         fields = {}

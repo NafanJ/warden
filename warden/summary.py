@@ -39,7 +39,8 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
     def q(sql: str, *a) -> list[dict]:
         return [dict(r) for r in store.conn.execute(sql, a).fetchall()]
 
-    incidents = q("SELECT * FROM incidents WHERE opened_at >= ? ORDER BY id", since)
+    incidents = q("SELECT * FROM incidents WHERE opened_at >= ? AND category != 'query' "
+                  "ORDER BY id", since)
     actions = q("SELECT * FROM actions WHERE created_at >= ? ORDER BY id", since)
     tier1 = q("SELECT * FROM audit WHERE ts >= ? AND decision='allowed' AND tier >= 1", since)
 

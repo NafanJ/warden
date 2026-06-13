@@ -47,6 +47,8 @@ TOOL_SCHEMAS: list[dict] = [
     _fn("disk_usage", "Disk usage for the monitored mount points."),
     _fn("du_summary", "Directory size breakdown (du) for a path.",
         {"path": {"type": "string"}, "depth": {"type": "integer", "default": 1}}, ["path"]),
+    _fn("mount_health", "Health of the monitored mounts: mounted, accessible, read-only. "
+        "Use to check whether the external drive dropped off or went read-only."),
     _fn("memory", "Host memory and swap state."),
     _fn("list_torrents", "List torrents in Transmission with progress, peers, and inactivity."),
     _fn("remove_torrents",
@@ -108,6 +110,8 @@ def execute_tool(name: str, args: dict[str, Any], *, backend: Backend, config: C
             return _stringify(backend.disk_usage(config.disk_paths))
         if name == "du_summary":
             return _stringify(backend.du_summary(args["path"], int(args.get("depth", 1))))
+        if name == "mount_health":
+            return _stringify(backend.mount_health(config.disk_paths))
         if name == "memory":
             return _stringify(backend.memory())
         if name == "list_torrents":

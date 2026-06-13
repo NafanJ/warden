@@ -14,7 +14,7 @@ from warden.config import Config
 
 LAN_IP = re.compile(r"\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b")
 KEY_LIKE = re.compile(r"\b(?:sk-[A-Za-z0-9_-]{16,}|[a-f0-9]{32}|[A-Za-z0-9+/=]{40,})\b")
-CATEGORIES = {"container_down", "disk_pressure", "stalled_download",
+CATEGORIES = {"container_down", "disk_pressure", "disk_unavailable", "stalled_download",
               "tunnel_down", "arr_queue_error", "oom", "other"}
 
 

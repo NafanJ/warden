@@ -20,6 +20,7 @@ def collect_snapshot(backend: Backend, config: Config) -> dict[str, Any]:
 
     safe("docker_ps", backend.docker_ps)
     safe("disk_usage", lambda: backend.disk_usage(config.disk_paths))
+    safe("mount_health", lambda: backend.mount_health(config.disk_paths))
     safe("memory", backend.memory)
     safe("torrents", backend.torrents)
     safe("arr_queue", lambda: {"sonarr": backend.arr_queue("sonarr"),

@@ -155,6 +155,27 @@ def test_status_command_ignored_from_non_owner(dconfig, store, channel):
     assert channel.sent == []
 
 
+def test_diagnose_command_dispatches_to_agent(dconfig, store, channel, monkeypatch):
+    import warden.notifier.discord_poller as poller
+    called = {}
+
+    async def fake_diag(question, config, backend, store, channel):
+        called["q"] = question
+
+    monkeypatch.setattr(poller, "run_diagnose", fake_diag)
+    process_batch([_msg("9300", "diagnose why is plex slow")],
+                  dconfig, ReplayBackend({}), store, channel)
+    assert called.get("q") == "why is plex slow"
+    assert any("investigating" in s for s in channel.sent)
+
+
+def test_diagnose_without_question_shows_usage(dconfig, store, channel, monkeypatch):
+    import warden.notifier.discord_poller as poller
+    monkeypatch.setattr(poller, "run_diagnose", lambda *a, **k: None)
+    process_batch([_msg("9301", "diagnose")], dconfig, ReplayBackend({}), store, channel)
+    assert any("Usage" in s for s in channel.sent)
+
+
 def test_status_shows_typing_indicator(dconfig, store, channel, monkeypatch):
     typed = []
     monkeypatch.setattr(dc, "trigger_typing", lambda config: typed.append(True))

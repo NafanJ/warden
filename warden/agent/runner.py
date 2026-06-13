@@ -1,7 +1,10 @@
-"""Agent runner: one Claude Agent SDK session per incident."""
+"""Agent runner: one agent session per incident (and per owner `diagnose`)."""
 from __future__ import annotations
 
+import dataclasses
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
@@ -12,6 +15,8 @@ from warden.agent.tools import build_warden_server
 from warden.backends import Backend
 from warden.config import Config
 from warden.notifier import Channel, get_channel
+from warden.notifier.logchannel import LogChannel
+from warden.sentinel.collectors import collect_snapshot
 from warden.store import Store
 
 SYSTEM_PROMPT = """You are warden, the on-call operations agent for "blink", a small \
@@ -134,3 +139,42 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
         + (f" (cost ${cost:.2f})" if cost else "")
     )
     return run_result
+
+
+async def run_diagnose(question: str, config: Config, backend: Backend,
+                       store: Store, channel: Channel) -> dict[str, Any]:
+    """Owner-initiated, read-only investigation of a question (the `diagnose`
+    command). Runs the agent in dry-run — it investigates and answers but never
+    takes autonomous action — then posts its findings to the channel."""
+    snapshot = collect_snapshot(backend, config)
+    key = f"diagnose:{datetime.now(timezone.utc).timestamp()}"
+    incident_id = store.open_incident(key, "query", question[:300])
+    incident_file = config.state_dir / "incidents" / f"{incident_id}.json"
+    incident_file.parent.mkdir(parents=True, exist_ok=True)
+    incident_file.write_text(json.dumps({
+        "incident_id": incident_id, "key": key, "category": "query",
+        "summary": f"Owner question: {question}",
+        "details": {"owner_question": question},
+        "snapshot": snapshot,
+    }, default=str))
+
+    # dry-run: answer + propose only, never auto-act. Internal notifications go to
+    # a LogChannel so the owner gets one clean answer, not warden's own chatter.
+    dry = dataclasses.replace(config, mode="dry-run")
+    result = await handle_incident(incident_id, dry, backend, store, LogChannel(config))
+    store.close_incident(incident_id, "resolved")  # a query shouldn't linger as an incident
+
+    body = "(no findings)"
+    path = result.get("report_path")
+    if path and Path(path).exists():
+        md = Path(path).read_text()
+        idx = md.find("## ")  # skip the report header/metadata, keep the sections
+        body = (md[idx:] if idx >= 0 else md).strip()
+        # if the model answered in prose, the fallback wraps it — drop the wrapper
+        body = body.replace("## Agent output (no structured report was written)\n\n", "")
+    cost = result.get("cost_usd")
+    cost_note = ""
+    if cost:
+        cost_note = f"\n\n_(diagnosed for {'<$0.01' if cost < 0.01 else f'${cost:.2f}'})_"
+    channel.send(f"🔍 **{question}**\n\n{body[:1700]}{cost_note}")
+    return result

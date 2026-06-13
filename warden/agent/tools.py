@@ -85,6 +85,15 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
         except Exception as exc:
             return _error(exc)
 
+    @tool("mount_health",
+          "Health of the monitored mounts: mounted, accessible, read-only. "
+          "Use to check whether the external drive dropped off or went read-only.", {})
+    async def mount_health(args):
+        try:
+            return _text(backend.mount_health(config.disk_paths))
+        except Exception as exc:
+            return _error(exc)
+
     @tool("memory", "Host memory and swap state.", {})
     async def memory(args):
         try:
@@ -188,7 +197,7 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
 
     tools = [
         get_containers, container_logs, container_inspect, container_restart,
-        docker_prune, disk_usage, du_summary, memory, list_torrents, remove_torrents,
+        docker_prune, disk_usage, du_summary, mount_health, memory, list_torrents, remove_torrents,
         arr_queue, arr_blocklist_research, tautulli_activity, check_urls, list_dir,
         delete_paths, write_report,
     ]

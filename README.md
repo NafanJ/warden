@@ -29,13 +29,14 @@ is the point: not a demo, a production log.
 ```
 
 - **Sentinel** — deterministic Python, runs every 5 minutes via systemd timer. Collects
-  signals (container health, disk, download/torrent state, optional URL reachability),
-  applies threshold rules. Green path costs $0.00 and one heartbeat line. Anomalies open
+  signals (container health, disk usage, **mount/drive health** — dropped or read-only
+  external drive — download/torrent state, optional URL reachability), applies threshold
+  rules. Green path costs $0.00 and one heartbeat line. Anomalies open
   incidents and wake the agent; a per-key cooldown keeps a persistent condition it can't
   fix (e.g. a genuinely full disk) from re-alerting every cycle.
 - **Agent** — one function-calling session per incident, powered by **OpenAI
   (`gpt-4o-mini` by default) or the Claude Agent SDK**, selected with `LLM_PROVIDER`.
-  It has **no shell and no file access** — only 17 purpose-built tools wrapping Docker,
+  It has **no shell and no file access** — only 18 purpose-built tools wrapping Docker,
   the *arr APIs, Transmission RPC, and the filesystem, every one routed through the same
   permission gate regardless of provider.
 - **Approvals** — the owner approves pending action #42 by tapping a ✅ reaction
@@ -48,9 +49,11 @@ is the point: not a demo, a production log.
   approvals and agent cost, plus a *Needs you* list of still-unresolved conditions — so
   problems the cooldown is holding quiet don't get forgotten. Free on quiet days; adds a
   short LLM narrative only when something actually happened.
-- **Channel commands** — type `status` for a live health readout (current issues + who's
-  streaming on Plex + pending approvals), or `user-stats [name|all]` for Plex watch
-  stats. Both run through the poller, owner-gated, no LLM.
+- **Channel commands** — owner-gated, via the poller: `status` for a live health readout
+  (current issues + who's streaming on Plex + pending approvals), `user-stats [name|all]`
+  for Plex watch stats (no LLM), and `diagnose <question>` to spin up an on-demand,
+  read-only agent investigation — e.g. *"diagnose why is plex buffering"* — that
+  reasons over the live system and answers in the channel.
 
 ## The safety model
 

@@ -14,7 +14,7 @@ from warden.config import Config
 @dataclass
 class Anomaly:
     key: str          # stable dedup key, e.g. "container_down:plex"
-    category: str     # container_down | disk_pressure | stalled_download | tunnel_down | arr_queue_error
+    category: str     # container_down | disk_pressure | disk_unavailable | stalled_download | tunnel_down | arr_queue_error
     summary: str
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -23,6 +23,7 @@ def evaluate(snapshot: dict[str, Any], config: Config) -> list[Anomaly]:
     anomalies: list[Anomaly] = []
     anomalies += _containers(snapshot, config)
     anomalies += _disk(snapshot, config)
+    anomalies += _mounts(snapshot)
     anomalies += _stalls(snapshot, config)
     anomalies += _arr_errors(snapshot)
     anomalies += _urls(snapshot)
@@ -60,6 +61,26 @@ def _disk(snapshot: dict[str, Any], config: Config) -> list[Anomaly]:
                 summary=f"{d['path']} at {d['used_pct']}% ({d['free_gb']}GB free)",
                 details=d,
             ))
+    return out
+
+
+def _mounts(snapshot: dict[str, Any]) -> list[Anomaly]:
+    out = []
+    for m in snapshot.get("mount_health") or []:
+        if not m.get("mounted"):
+            problem = "is NOT MOUNTED (drive dropped off?)"
+        elif not m.get("accessible"):
+            problem = f"is INACCESSIBLE — {m.get('error') or 'I/O error'}"
+        elif m.get("read_only"):
+            problem = "went READ-ONLY (filesystem errors?)"
+        else:
+            continue
+        out.append(Anomaly(
+            key=f"disk_unavailable:{m['path']}",
+            category="disk_unavailable",
+            summary=f"Mount {m['path']} {problem}",
+            details=m,
+        ))
     return out
 
 

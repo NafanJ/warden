@@ -8,6 +8,7 @@ logic and the Tier 2 safety model are identical to the WhatsApp path.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 
 from warden.backends import Backend
@@ -16,6 +17,7 @@ from warden.config import Config, load_config
 from warden.notifier import Channel, get_channel
 from warden.notifier import discord as dc
 from warden.notifier.discord import fetch_messages
+from warden.agent.runner import run_diagnose
 from warden.store import Store
 from warden.summary import format_status, gather
 from warden.userstats import handle_userstats
@@ -43,8 +45,9 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
         arg = parts[1] if len(parts) > 1 else ""
         is_status = cmd in ("status", "!status")
         is_userstats = cmd in ("user-stats", "userstats", "!user-stats")
+        is_diagnose = cmd in ("diagnose", "!diagnose")
         is_reply = bool(REPLY.match(content))
-        if not (is_status or is_userstats or is_reply):
+        if not (is_status or is_userstats or is_diagnose or is_reply):
             continue  # ignore ordinary chatter — only commands / YES-NO <id>
 
         try:
@@ -63,6 +66,15 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
                 channel.send(handle_userstats(arg, backend))
             except Exception as exc:
                 channel.send(f"warden: couldn't fetch user stats — {exc}")
+        elif is_diagnose:
+            if not arg.strip():
+                channel.send("Usage: `diagnose <question>` — e.g. `diagnose why is plex buffering`")
+            else:
+                channel.send(f"🔍 investigating: _{arg}_ … (~30s)")
+                try:
+                    asyncio.run(run_diagnose(arg, config, backend, store, channel))
+                except Exception as exc:
+                    channel.send(f"warden: diagnose failed — {exc}")
         else:
             channel.send(handle_reply(content, config, backend, store, channel))
     return highest

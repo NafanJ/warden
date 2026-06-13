@@ -23,8 +23,8 @@ from warden.store import Store
 
 TIER0 = {
     "get_containers", "container_logs", "container_inspect", "disk_usage",
-    "du_summary", "memory", "list_torrents", "arr_queue", "tautulli_activity",
-    "check_urls", "list_dir", "write_report",
+    "du_summary", "mount_health", "memory", "list_torrents", "arr_queue",
+    "tautulli_activity", "check_urls", "list_dir", "write_report",
 }
 TIER1 = {"container_restart", "arr_blocklist_research", "remove_torrents", "docker_prune"}
 TIER2 = {"delete_paths"}

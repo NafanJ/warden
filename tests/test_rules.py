@@ -69,6 +69,27 @@ def test_fresh_torrent_not_flagged():
     assert not [a for a in anomalies if a.category == "stalled_download"]
 
 
+def test_mount_dropped_detected():
+    snap = {"mount_health": [{"path": "/mnt/Modi", "mounted": False,
+                              "accessible": False, "read_only": False, "error": "gone"}]}
+    anomalies = evaluate(snap, cfg())
+    m = [a for a in anomalies if a.category == "disk_unavailable"]
+    assert len(m) == 1 and "NOT MOUNTED" in m[0].summary
+
+
+def test_mount_readonly_detected():
+    snap = {"mount_health": [{"path": "/mnt/Modi", "mounted": True,
+                              "accessible": True, "read_only": True, "error": None}]}
+    assert [a for a in evaluate(snap, cfg()) if a.category == "disk_unavailable"
+            and "READ-ONLY" in a.summary]
+
+
+def test_healthy_mount_not_flagged():
+    snap = {"mount_health": [{"path": "/", "mounted": True, "accessible": True,
+                              "read_only": False, "error": None}]}
+    assert not [a for a in evaluate(snap, cfg()) if a.category == "disk_unavailable"]
+
+
 def test_tunnel_down_detected():
     snap = {"url_checks": [{"url": "https://plex.example.com", "ok": False, "error": "timeout"}]}
     anomalies = evaluate(snap, cfg())

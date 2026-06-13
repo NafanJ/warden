@@ -51,6 +51,11 @@ class ReplayBackend:
     def memory(self) -> dict[str, Any]:
         return self.snapshot.get("memory", {})
 
+    def mount_health(self, paths: list[str]) -> list[dict[str, Any]]:
+        return self.snapshot.get("mount_health",
+                                 [{"path": p, "mounted": True, "read_only": False,
+                                   "accessible": True, "error": None} for p in paths])
+
     # --- transmission ---
     def torrents(self) -> list[dict[str, Any]]:
         return self.snapshot.get("torrents", [])
