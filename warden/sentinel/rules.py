@@ -71,15 +71,20 @@ def _stalls(snapshot: dict[str, Any], config: Config) -> list[Anomaly]:
         if (t.get("age_hours") or 0) < config.stall_min_age_hours:
             continue
         inactive = t.get("inactive_hours")
-        if t.get("peersConnected", 0) == 0 and inactive is not None \
-                and inactive >= config.stall_threshold_hours:
-            out.append(Anomaly(
-                key=f"stalled_download:{t['hashString']}",
-                category="stalled_download",
-                summary=f"Torrent stalled {inactive}h with 0 peers: {t['name']}",
-                details={k: t.get(k) for k in
-                         ("id", "name", "hashString", "percentDone", "inactive_hours", "age_hours")},
-            ))
+        if inactive is None or inactive < config.stall_threshold_hours:
+            continue
+        # No piece activity for the threshold window is a stall whether or not
+        # peers are connected: 0 peers = dead source, peers-but-idle = stuck.
+        peers = t.get("peersConnected", 0)
+        descriptor = "0 peers" if peers == 0 else f"{peers} peers but no movement"
+        out.append(Anomaly(
+            key=f"stalled_download:{t['hashString']}",
+            category="stalled_download",
+            summary=f"Torrent stalled {inactive}h ({descriptor}): {t['name']}",
+            details={k: t.get(k) for k in
+                     ("id", "name", "hashString", "percentDone", "inactive_hours",
+                      "age_hours", "peersConnected")},
+        ))
     return out
 
 

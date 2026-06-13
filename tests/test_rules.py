@@ -42,6 +42,25 @@ def test_stall_detected_but_not_healthy_torrent():
     assert "Some.Show" in stalls[0].summary
 
 
+def test_stall_detected_with_peers_but_idle():
+    snap = snapshot_of("stalled-torrent")
+    for t in snap["torrents"]:
+        if t["name"].startswith("Healthy"):
+            t["inactive_hours"] = 6.0  # has peers, but no movement past the threshold
+    stalls = [a for a in evaluate(snap, cfg()) if a.category == "stalled_download"]
+    assert len(stalls) == 2  # the 0-peer one AND the idle-with-peers one
+    assert any("peers but no movement" in a.summary for a in stalls)
+
+
+def test_idle_with_peers_below_threshold_not_flagged():
+    snap = snapshot_of("stalled-torrent")
+    for t in snap["torrents"]:
+        if t["name"].startswith("Healthy"):
+            t["inactive_hours"] = 1.0  # idle, but under the 4h threshold
+    stalls = [a for a in evaluate(snap, cfg()) if a.category == "stalled_download"]
+    assert len(stalls) == 1  # only the genuinely stalled 0-peer torrent
+
+
 def test_fresh_torrent_not_flagged():
     snap = snapshot_of("stalled-torrent")
     for t in snap["torrents"]:
