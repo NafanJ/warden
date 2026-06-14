@@ -65,6 +65,22 @@ def test_status_all_clear_when_healthy(config, store):
     assert "all clear ✅" in format_status(g)
 
 
+def test_summary_lists_auto_fixes(config, store):
+    store.audit("container_restart", {"name": "plex"}, 1, "allowed")
+    store.audit("remove_torrents", {"ids": [1], "delete_data": False}, 1, "allowed")
+    store.audit("remove_torrents", {"ids": [2], "delete_data": False}, 1, "allowed")
+    g = gather(config, ReplayBackend(SNAP), store)
+    text = format_summary(g)
+    assert "Auto-fixes:" in text
+    assert "restarted plex" in text
+    assert "cleared a completed torrent ×2" in text   # identical fixes collapse
+
+
+def test_summary_omits_auto_fixes_when_none(config, store):
+    g = gather(config, ReplayBackend(SNAP), store)
+    assert "Auto-fixes:" not in format_summary(g)
+
+
 def test_resolved_incident_not_in_needs_you(config, store):
     iid = store.open_incident("container_down:plex", "container_down", "plex down")
     store.close_incident(iid, "resolved")

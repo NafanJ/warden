@@ -7,6 +7,8 @@ Run:  python -m warden.summary
 """
 from __future__ import annotations
 
+import json
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -70,6 +72,34 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
     }
 
 
+def _action_label(row: dict[str, Any]) -> str:
+    """A short, owner-readable phrase for one Tier-1 auto-fix (an audit row)."""
+    tool = row.get("tool") or "action"
+    try:
+        args = json.loads(row.get("args_json") or "{}")
+    except (ValueError, TypeError):
+        args = {}
+    if tool == "container_restart":
+        return f"restarted {args.get('name', '?')}"
+    if tool == "docker_prune":
+        return "pruned Docker images / build cache"
+    if tool == "remove_torrents":
+        return "cleared a completed torrent"
+    if tool == "arr_blocklist_research":
+        return f"blocklisted + re-searched in {args.get('app', '*arr')}"
+    if tool == "delete_paths":
+        return f"deleted {len(args.get('paths') or [])} path(s)"
+    detail = ", ".join(f"{k}={v}" for k, v in args.items())
+    return f"{tool}({detail})" if detail else tool
+
+
+def _autofix_lines(g: dict[str, Any]) -> list[str]:
+    """Bulleted recap of the Tier-1 fixes warden made on its own, identical
+    fixes collapsed into a single ×N bullet."""
+    counts = Counter(_action_label(a) for a in g["tier1"])
+    return [f"  • {label}" + (f" ×{n}" if n > 1 else "") for label, n in counts.items()]
+
+
 def _disk_line(g: dict[str, Any]) -> str:
     return "  ·  ".join(
         f"{d['path']} {d['used_pct']}%" + (" ⚠️" if d.get("used_pct", 0) >= 92 else "")
@@ -131,6 +161,9 @@ def format_summary(g: dict[str, Any], label: str = "daily") -> str:
         f"Actions:     {len(g['tier1'])} auto-fix(es) · {len(g['actions'])} approval(s) requested",
         f"Agent cost:  ${g['cost']:.2f}",
     ]
+    fixes = _autofix_lines(g)
+    if fixes:
+        lines += ["", "🔧 **Auto-fixes:**", *fixes[:8]]
     needs = [f"  • {i['summary']}" for i in g["unresolved"][:6]]
     if g["collector_errors"]:
         needs.append(f"  • monitoring gap: {', '.join(g['collector_errors'])} unreachable")
