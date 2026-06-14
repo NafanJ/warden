@@ -77,16 +77,18 @@ aid = store.queue_action(None, "delete_paths",
     {"paths": ["/mnt/Modi/Kodi/downloads/complete/__warden_selftest__"],
      "reason": "Discord setup self-test (path does not exist; delete is a no-op)"},
     2, "Self-test delete (no-op)")
-get_channel(cfg).send(f"🛡️ warden self-test: reply YES {aid} to confirm the loop.")
+# send_approval is what the agent uses for real Tier 2 actions: it posts the prompt
+# with Approve/Reject buttons (and ✅/❌ reactions as a fallback).
+get_channel(cfg).send_approval(aid, f"🛡️ warden self-test (action #{aid}): approve to confirm the loop.")
 print("queued action", aid)
 PY
 ```
 
 The path doesn't exist, so approving it is a no-op (and `delete_paths` is hard-limited
-to the downloads tree regardless). The bot posts the alert with **✅ and ❌ already
-attached** — **tap ✅** and within a few seconds it executes and edits the message to
-`✅ Approved — executed`. Tap ❌ (or type `NO <id>`) to reject. Typing `YES <id>` works
-too if you'd rather not tap.
+to the downloads tree regardless). The bot posts the alert with **Approve/Reject
+buttons** (and ✅/❌ reactions as a fallback) — **tap Approve** and within a few seconds
+it executes, then edits the message to the outcome and removes the buttons. Tap Reject
+(or ❌, or type `NO <id>`) to cancel; typing `YES <id>` also works.
 
 ## Notes
 
@@ -95,6 +97,10 @@ too if you'd rather not tap.
   default over WhatsApp.
 - Only messages from `DISCORD_OWNER_ID` are acted on; ordinary chat in the channel is
   ignored (no reply spam).
+- **Buttons** (Approve/Reject on approvals; Restart/Diagnose/Dismiss on escalated
+  incidents) ride the same Gateway connection as the slash commands, so they need the
+  service running and the `applications.commands` invite scope. A non-owner who taps a
+  button gets a private "owner only" notice and the alert is left untouched.
 - Pending actions expire after 12h; a late `YES` returns "no longer pending".
 - The bot token is the one secret — treat it like a password; rotate it on the Bot tab if
   leaked. `.env` is gitignored.

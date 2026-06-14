@@ -42,11 +42,18 @@ is the point: not a demo, a production log.
   It has **no shell and no file access** — only 18 purpose-built tools wrapping Docker,
   the *arr APIs, Transmission RPC, and the filesystem, every one routed through the same
   permission gate regardless of provider.
-- **Approvals** — the owner approves pending action #42 by tapping a ✅ reaction
-  (or typing `YES 42`; `NO 42`/❌ cancels). Two transports, same `handle_reply` logic:
-  a **Discord** bot that *polls* for reactions/replies (recommended — no public
-  endpoint, ~5-min setup, see `DISCORD_SETUP.md`), or a **WhatsApp** webhook (FastAPI
-  behind a Cloudflare Tunnel, `WHATSAPP_SETUP.md`).
+- **Approvals** — the owner approves pending action #42 by tapping an **Approve**
+  button on the alert (or a ✅ reaction, or typing `YES 42`; **Reject**/❌/`NO 42`
+  cancels). Two transports, same `handle_reply` logic: a **Discord** bot that *polls*
+  for reactions/replies (recommended — no public endpoint, ~5-min setup, see
+  `DISCORD_SETUP.md`), or a **WhatsApp** webhook (FastAPI behind a Cloudflare Tunnel,
+  `WHATSAPP_SETUP.md`).
+- **Action buttons** — Discord alerts carry one-tap buttons (over the same Gateway as
+  the slash commands). Approval prompts get **Approve/Reject**; an incident warden
+  escalates instead of auto-fixing gets context-aware buttons — **Restart** for a downed
+  container, **Diagnose** to re-investigate, **Dismiss** to silence it. A tap is owner-
+  gated and runs the same audited code as the typed path, then the alert is edited to the
+  outcome and its buttons removed so it can't re-fire.
 - **Daily summary** — a deterministic end-of-day digest (21:00, systemd timer) posted to
   the channel: container/disk/download health, the day's incidents, autonomous fixes,
   approvals and agent cost, plus a *Needs you* list of still-unresolved conditions — so
