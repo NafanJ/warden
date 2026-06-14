@@ -13,7 +13,7 @@ class LogChannel:
         self.path = config.state_dir / "notifications.log"
         self.sent: list[str] = []
 
-    def send(self, text: str) -> None:
+    def send(self, text: str, components: list | None = None) -> None:
         self.sent.append(text)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")

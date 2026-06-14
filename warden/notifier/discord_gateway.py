@@ -19,6 +19,7 @@ from warden.backends import Backend
 from warden.config import Config
 from warden.notifier import Channel
 from warden.notifier import discord as dc
+from warden.notifier.components import handle_component
 from warden.notifier.discord_commands import dispatch, parse_interaction
 from warden.store import Store
 
@@ -37,8 +38,23 @@ async def _heartbeat(ws, interval_ms: int, state: dict) -> None:
         await ws.send(json.dumps({"op": OP_HEARTBEAT, "d": state.get("seq")}))
 
 
-async def _handle_interaction(interaction: dict, config: Config, backend: Backend,
-                              store: Store, channel: Channel) -> None:
+def _author_id(interaction: dict) -> str:
+    member = interaction.get("member") or {}
+    user = member.get("user") or interaction.get("user") or {}
+    return str(user.get("id", ""))
+
+
+async def _dispatch_interaction(interaction: dict, config: Config, backend: Backend,
+                                store: Store, channel: Channel) -> None:
+    itype = interaction.get("type")
+    if itype == 2:        # APPLICATION_COMMAND — a /slash command
+        await _handle_command(interaction, config, backend, store, channel)
+    elif itype == 3:      # MESSAGE_COMPONENT — a button click
+        await _handle_component(interaction, config, backend, store, channel)
+
+
+async def _handle_command(interaction: dict, config: Config, backend: Backend,
+                          store: Store, channel: Channel) -> None:
     parsed = parse_interaction(interaction)
     if not parsed:
         return
@@ -67,6 +83,36 @@ async def _handle_interaction(interaction: dict, config: Config, backend: Backen
         print(f"gateway: could not post result for /{name}: {exc}")
 
 
+async def _handle_component(interaction: dict, config: Config, backend: Backend,
+                            store: Store, channel: Channel) -> None:
+    custom_id = (interaction.get("data") or {}).get("custom_id") or ""
+    interaction_id, token = interaction["id"], interaction["token"]
+
+    # Owner check first (it's instant), so a stranger gets a private rejection
+    # rather than us deferring and wiping the owner's alert message.
+    if config.discord_owner_id and _author_id(interaction) != config.discord_owner_id:
+        try:
+            dc.interaction_reply_ephemeral(interaction_id, token,
+                                           "⛔ These buttons are the owner's.")
+        except Exception as exc:
+            print(f"gateway: ephemeral reject failed: {exc}")
+        return
+
+    # DEFERRED_UPDATE so the eventual edit lands on the button's own message.
+    try:
+        dc.interaction_defer(interaction_id, token, dc.DEFERRED_UPDATE)
+    except Exception as exc:
+        print(f"gateway: defer failed for button {custom_id}: {exc}")
+        return
+
+    reply = await asyncio.to_thread(handle_component, custom_id,
+                                    config, backend, store, channel)
+    try:  # edit the alert to the outcome and strip the buttons so it can't re-fire
+        dc.interaction_respond(config, token, reply, components=[])
+    except Exception as exc:
+        print(f"gateway: could not update message for button {custom_id}: {exc}")
+
+
 async def _session(config: Config, backend: Backend, store: Store, channel: Channel) -> None:
     import websockets  # local import so the poller still runs if the dep is absent
     state: dict = {"seq": None}
@@ -90,7 +136,7 @@ async def _session(config: Config, backend: Backend, store: Store, channel: Chan
                     return                            # drop and reconnect fresh
                 elif op == OP_DISPATCH and msg.get("t") == "INTERACTION_CREATE":
                     asyncio.create_task(
-                        _handle_interaction(msg["d"], config, backend, store, channel))
+                        _dispatch_interaction(msg["d"], config, backend, store, channel))
         finally:
             hb.cancel()
 

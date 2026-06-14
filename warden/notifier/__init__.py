@@ -8,7 +8,7 @@ from warden.config import Config
 
 
 class Channel(Protocol):
-    def send(self, text: str) -> None: ...
+    def send(self, text: str, components: list | None = None) -> None: ...
 
     def send_approval(self, action_id: int, text: str) -> str | None:
         """Post a Tier 2 approval prompt. May return a transport reference (e.g.

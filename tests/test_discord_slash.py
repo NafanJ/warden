@@ -94,7 +94,7 @@ def test_gateway_status_defers_then_answers(dconfig, store, channel, monkeypatch
     captured = _stub_responses(monkeypatch)
     backend = ReplayBackend({"docker_ps": [{"name": "plex", "state": "running", "status": "Up"}],
                              "disk_usage": [], "torrents": []})
-    asyncio.run(gw._handle_interaction(_interaction("status"), dconfig, backend, store, channel))
+    asyncio.run(gw._handle_command(_interaction("status"), dconfig, backend, store, channel))
     assert captured["deferred"] is True                 # ACKed within the 3s window
     assert "warden status" in captured["reply"]         # then the real health digest
 
@@ -102,7 +102,7 @@ def test_gateway_status_defers_then_answers(dconfig, store, channel, monkeypatch
 def test_gateway_rejects_non_owner(dconfig, store, channel, monkeypatch):
     captured = _stub_responses(monkeypatch)
     backend = ReplayBackend({"docker_ps": [], "disk_usage": [], "torrents": []})
-    asyncio.run(gw._handle_interaction(_interaction("status", author=OTHER),
+    asyncio.run(gw._handle_command(_interaction("status", author=OTHER),
                                        dconfig, backend, store, channel))
     assert captured["deferred"] is True
     assert "owner" in captured["reply"].lower()
@@ -118,7 +118,7 @@ def test_gateway_diagnose_acks_to_channel(dconfig, store, channel, monkeypatch):
     monkeypatch.setattr(cmds, "run_diagnose", fake_diag)
 
     it = _interaction("diagnose", [{"name": "question", "value": "why is plex slow"}])
-    asyncio.run(gw._handle_interaction(it, dconfig, ReplayBackend({}), store, channel))
+    asyncio.run(gw._handle_command(it, dconfig, ReplayBackend({}), store, channel))
     # diagnose streams to the channel, so the interaction reply points there
     assert "chan-42" in captured["reply"]
     assert any("investigating" in s for s in channel.sent)

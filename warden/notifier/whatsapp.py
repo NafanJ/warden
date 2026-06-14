@@ -34,8 +34,8 @@ class WhatsAppChannel:
         self.send(text)
         return None
 
-    def send(self, text: str) -> None:
-        resp = self._post({"type": "text", "text": {"body": text[:4000]}})
+    def send(self, text: str, components: list | None = None) -> None:
+        resp = self._post({"type": "text", "text": {"body": text[:4000]}})  # components: Discord-only, ignored
         if resp.status_code >= 400:
             # outside the 24h window free-form text is rejected -> use template
             template_resp = self._post({

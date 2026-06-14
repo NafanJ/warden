@@ -72,9 +72,13 @@ def main() -> int:
         return 0
 
     if config.mode == "detect":
+        from warden.notifier.components import incident_buttons
         channel = get_channel(config)
         for incident_id, anomaly in new_incidents:
-            channel.send(f"⚠️ warden (detect-only) incident #{incident_id}: {anomaly.summary}")
+            buttons = incident_buttons(incident_id, anomaly.category,
+                                       anomaly.details.get("container", ""))
+            channel.send(f"⚠️ warden (detect-only) incident #{incident_id}: {anomaly.summary}",
+                         buttons)
         return 0
 
     # dry-run / active: hand each new incident to the agent

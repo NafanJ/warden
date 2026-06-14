@@ -52,19 +52,23 @@ class DiscordChannel:
             raise ValueError("Discord channel requires DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID")
         self.config = config
 
-    def _post_message(self, text: str) -> dict:
+    def _post_message(self, text: str, components: list | None = None) -> dict:
+        body: dict = {"content": text[:2000]}  # Discord caps message bodies at 2000 chars
+        if components:
+            body["components"] = components
         resp = _request("POST", self.config.discord_bot_token,
-                        f"{API}/channels/{self.config.discord_channel_id}/messages",
-                        json={"content": text[:2000]})  # Discord caps message bodies at 2000 chars
+                        f"{API}/channels/{self.config.discord_channel_id}/messages", json=body)
         return resp.json()
 
-    def send(self, text: str) -> None:
-        self._post_message(text)
+    def send(self, text: str, components: list | None = None) -> str:
+        return str(self._post_message(text, components)["id"])
 
     def send_approval(self, action_id: int, text: str) -> str | None:
-        """Post an approval prompt and pre-add ✅/❌ so the owner can approve with
-        a single tap. Returns the message id; the poller reads its reactions."""
-        msg = self._post_message(text)
+        """Post an approval prompt with Approve/Reject buttons (and ✅/❌ reactions
+        as a fallback), so the owner can decide with one tap. Returns the message
+        id; the gateway handles button clicks, the poller reads reactions."""
+        from warden.notifier.components import approval_buttons
+        msg = self._post_message(text, approval_buttons(action_id))
         message_id = str(msg["id"])
         for emoji in (APPROVE_EMOJI, REJECT_EMOJI):
             add_reaction(self.config, message_id, emoji)
@@ -115,7 +119,8 @@ def fetch_messages(config: Config, after: str | None = None, limit: int = 50) ->
 # the token alone — no extra config. Commands registered to a guild appear
 # instantly; global commands can take up to an hour to propagate.
 
-DEFERRED_RESPONSE = 5  # ACK an interaction now, edit in the real answer later
+DEFERRED_RESPONSE = 5  # ACK a slash command now, edit the real answer in later
+DEFERRED_UPDATE = 6    # ACK a button click now, edit its message in later
 
 
 _APP_ID: str | None = None
@@ -144,17 +149,32 @@ def register_commands(config: Config, commands: list[dict]) -> str:
     return scope
 
 
-def interaction_defer(interaction_id: str, token: str) -> None:
-    """ACK an interaction within Discord's 3s window with a 'thinking…' state, so
-    a slow command (diagnose) doesn't show 'application did not respond'. The
-    callback endpoint is authenticated by the interaction token in the URL, not
-    the bot token."""
+def interaction_defer(interaction_id: str, token: str,
+                      deferred_type: int = DEFERRED_RESPONSE) -> None:
+    """ACK an interaction within Discord's 3s window so slow work (diagnose, a
+    restart) doesn't show 'application did not respond'. Use DEFERRED_RESPONSE for
+    slash commands (posts a new reply) and DEFERRED_UPDATE for button clicks
+    (edits the button's own message). The callback endpoint is authenticated by
+    the interaction token in the URL, not the bot token."""
     httpx.post(f"{API}/interactions/{interaction_id}/{token}/callback",
-               json={"type": DEFERRED_RESPONSE}, timeout=30).raise_for_status()
+               json={"type": deferred_type}, timeout=30).raise_for_status()
 
 
-def interaction_respond(config: Config, token: str, text: str) -> None:
-    """Fill in (edit) the deferred response with the command's actual output."""
+def interaction_reply_ephemeral(interaction_id: str, token: str, text: str) -> None:
+    """Reply visible only to the clicker (flag 64) without deferring — used to turn
+    away a non-owner without touching the message they clicked on."""
+    httpx.post(f"{API}/interactions/{interaction_id}/{token}/callback",
+               json={"type": 4, "data": {"content": text[:2000], "flags": 64}},
+               timeout=30).raise_for_status()
+
+
+def interaction_respond(config: Config, token: str, text: str,
+                        components: list | None = None) -> None:
+    """Fill in (edit) the deferred response/message with the result. Pass
+    components=[] to strip the buttons off a message once its action is done."""
     app_id = application_id(config)
+    payload: dict = {"content": text[:2000]}
+    if components is not None:
+        payload["components"] = components
     httpx.patch(f"{API}/webhooks/{app_id}/{token}/messages/@original",
-                json={"content": text[:2000]}, timeout=30).raise_for_status()
+                json=payload, timeout=30).raise_for_status()
