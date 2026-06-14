@@ -20,6 +20,13 @@ def test_quiet_day_is_not_notable(config, store):
     assert "2/2 up" in text and "93.8% ⚠️" in text and "$0.00" in text
 
 
+def test_disk_glyph_follows_configured_threshold(config, store):
+    config.disk_threshold_pct = 97          # raise the bar
+    g = gather(config, ReplayBackend(SNAP), store)
+    text = format_summary(g)
+    assert "93.8%" in text and "93.8% ⚠️" not in text  # under 97 → no warning glyph
+
+
 def test_notable_day_with_cost_and_needs_you(config, store):
     iid = store.open_incident("disk_pressure:/mnt/Modi", "disk_pressure", "/mnt/Modi at 93.8%")
     store.set_incident_cost(iid, 0.01)

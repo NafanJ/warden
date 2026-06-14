@@ -54,6 +54,7 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
         "containers_total": len(containers),
         "containers_down": [d for d in down if d],
         "disk": snapshot.get("disk_usage") or [],
+        "disk_threshold": config.disk_threshold_pct,
         "torrents": len(snapshot.get("torrents") or []),
         "stalled": sum(1 for a in anomalies if a.category == "stalled_download"),
         "collector_errors": snapshot.get("collector_errors") or {},
@@ -101,8 +102,9 @@ def _autofix_lines(g: dict[str, Any]) -> list[str]:
 
 
 def _disk_line(g: dict[str, Any]) -> str:
+    warn_at = g.get("disk_threshold", 92)
     return "  ·  ".join(
-        f"{d['path']} {d['used_pct']}%" + (" ⚠️" if d.get("used_pct", 0) >= 92 else "")
+        f"{d['path']} {d['used_pct']}%" + (" ⚠️" if d.get("used_pct", 0) >= warn_at else "")
         for d in g["disk"]
     ) or "n/a"
 
