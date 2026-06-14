@@ -18,7 +18,10 @@ class Config:
     max_budget_usd: float = 1.0
 
     state_dir: Path = Path("state")
-    incidents_dir: Path = Path("incidents")
+    # Reports live *under* state_dir so they sit with the incident trigger JSONs +
+    # DB and survive a deploy (the deploy rsync --delete excludes state/; a sibling
+    # incidents/ dir would get wiped on every update).
+    incidents_dir: Path = Path("state/incidents")
 
     sonarr_url: str = "http://localhost:8989"
     sonarr_api_key: str = ""
@@ -103,6 +106,7 @@ def deletable(path: str, roots: list[str]) -> bool:
 def load_config(env_file: str | Path | None = None) -> Config:
     load_dotenv(env_file or Path(__file__).resolve().parent.parent / ".env")
     e = os.environ.get
+    state_dir = Path(e("WARDEN_STATE_DIR", "state"))
     return Config(
         mode=e("WARDEN_MODE", "dry-run"),
         llm_provider=e("LLM_PROVIDER", "openai"),
@@ -110,8 +114,8 @@ def load_config(env_file: str | Path | None = None) -> Config:
         openai_api_key=e("OPENAI_API_KEY", ""),
         openai_model=e("OPENAI_MODEL", "gpt-4o-mini"),
         max_budget_usd=float(e("WARDEN_MAX_BUDGET_USD", "1.0")),
-        state_dir=Path(e("WARDEN_STATE_DIR", "state")),
-        incidents_dir=Path(e("WARDEN_INCIDENTS_DIR", "incidents")),
+        state_dir=state_dir,
+        incidents_dir=Path(e("WARDEN_INCIDENTS_DIR", str(state_dir / "incidents"))),
         sonarr_url=e("SONARR_URL", "http://localhost:8989"),
         sonarr_api_key=e("SONARR_API_KEY", ""),
         radarr_url=e("RADARR_URL", "http://localhost:7878"),

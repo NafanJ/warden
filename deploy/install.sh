@@ -30,6 +30,7 @@ fi
 mkdir -p "$DEST"
 rsync -a --delete \
   --exclude '.git' --exclude '.venv' --exclude 'state' --exclude '.env' \
+  --exclude 'incidents' \
   "$REPO_DIR/" "$DEST/"
 
 if [ ! -f "$DEST/.env" ]; then
