@@ -20,9 +20,11 @@ agent queues Tier 2 action ──▶ bot posts alert + pre-adds ✅/❌
 1. <https://discord.com/developers/applications> → **New Application**, name it `warden`.
 2. **Bot** tab → **Reset Token** → copy it. This is `DISCORD_BOT_TOKEN`.
 3. On the same tab, enable **Message Content Intent** (so the bot can read your replies).
-4. **Installation** (or **OAuth2 → URL Generator**): scope **`bot`**, permissions
-   **View Channels** + **Send Messages** + **Read Message History**. Open the generated
-   URL and add the bot to your server.
+4. **Installation** (or **OAuth2 → URL Generator**): scopes **`bot`** *and*
+   **`applications.commands`** (the latter is required for the `/status`, `/diagnose`,
+   `/user-stats` slash commands to appear), permissions **View Channels** + **Send
+   Messages** + **Read Message History**. Open the generated URL and add the bot to your
+   server.
 
 ## 2. Make a private channel and get the ids
 
@@ -39,15 +41,26 @@ NOTIFY_CHANNEL=discord
 DISCORD_BOT_TOKEN=<bot token from step 1>
 DISCORD_CHANNEL_ID=<channel id from step 2>
 DISCORD_OWNER_ID=<your user id from step 2>
+DISCORD_GUILD_ID=<your server id>   # optional: slash commands appear instantly here
 ```
+
+`DISCORD_GUILD_ID` (right-click the server icon → **Copy Server ID**) is optional. Set
+it and the `/status`, `/diagnose`, `/user-stats` commands register to that server
+instantly; leave it blank and they register globally, which can take up to an hour to
+show in the picker.
 
 ## 4. Run the poller
 
 ```bash
 sudo systemctl enable --now warden-discord.service   # deploy/warden-discord.service
 # it runs: python -m warden.notifier.discord_poller
+# on start it (re)registers the slash commands and opens the gateway connection;
+# the log line "registered 3 slash command(s) to …" confirms it.
 journalctl -u warden-discord -f                       # watch it
 ```
+
+To (re)register the slash commands without restarting the service — e.g. after editing
+`COMMANDS` — run `python -m warden.notifier.discord_commands`.
 
 ## 5. End-to-end test
 
@@ -93,5 +106,7 @@ too if you'd rather not tap.
 | Bot posts nothing | `NOTIFY_CHANNEL` not `discord`, or wrong `DISCORD_CHANNEL_ID`, or bot not added to the server. |
 | Typed replies do nothing | Reply came from a user other than `DISCORD_OWNER_ID`, or **Message Content Intent** is off (step 1.3). |
 | Tapping ✅/❌ does nothing | `DISCORD_OWNER_ID` not set (reactions need a known owner to attribute the tap), or you tapped a different emoji than the bot pre-added. Reading reactions does **not** require Message Content Intent. |
+| `/` commands don't appear | Bot wasn't invited with the **`applications.commands`** scope (step 1.4 — re-invite), or they're registering globally (no `DISCORD_GUILD_ID`) and haven't propagated yet (up to 1h). Check the log for "registered N slash command(s)". |
+| `/diagnose` shows "application did not respond" | Gateway not connected — check the log for a gateway error, and that `websockets` is installed in the venv. Typed `diagnose <question>` still works as a fallback. |
 | `Discord channel requires DISCORD_BOT_TOKEN…` on startup | `NOTIFY_CHANNEL=discord` but token or channel id is blank. |
 | `401 Unauthorized` in the poller log | Bad/rotated `DISCORD_BOT_TOKEN`. |

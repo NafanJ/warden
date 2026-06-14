@@ -52,11 +52,15 @@ is the point: not a demo, a production log.
   approvals and agent cost, plus a *Needs you* list of still-unresolved conditions — so
   problems the cooldown is holding quiet don't get forgotten. Free on quiet days; adds a
   short LLM narrative only when something actually happened.
-- **Channel commands** — owner-gated, via the poller: `status` for a live health readout
-  (current issues + who's streaming on Plex + pending approvals), `user-stats [name|all]`
-  for Plex watch stats (no LLM), and `diagnose <question>` to spin up an on-demand,
-  read-only agent investigation — e.g. *"diagnose why is plex buffering"* — that
-  reasons over the live system and answers in the channel.
+- **Channel commands** — owner-gated, two ways to invoke: native Discord **slash
+  commands** (`/status`, `/diagnose question:…`, `/user-stats user:…`) that show up in
+  the `/` picker with parameter hints, or the same words typed as plain messages. Slash
+  commands arrive as *interactions* over an outbound **Gateway** websocket (still no
+  inbound port), running alongside the message poller in one process. `status` gives a
+  live health readout (current issues + who's streaming on Plex + pending approvals),
+  `user-stats` returns Plex watch stats (no LLM), and `diagnose` spins up an on-demand,
+  read-only agent investigation — e.g. *"why is plex buffering"* — that reasons over the
+  live system and answers in the channel.
 
 ## The safety model
 

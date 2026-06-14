@@ -62,6 +62,7 @@ class Config:
     discord_bot_token: str = ""
     discord_channel_id: str = ""
     discord_owner_id: str = ""
+    discord_guild_id: str = ""   # register slash commands here (instant); global if unset (~1h)
 
     def secrets(self) -> list[str]:
         """Every value that must never appear in a report or notification."""
@@ -139,4 +140,5 @@ def load_config(env_file: str | Path | None = None) -> Config:
         discord_bot_token=e("DISCORD_BOT_TOKEN", ""),
         discord_channel_id=e("DISCORD_CHANNEL_ID", ""),
         discord_owner_id=e("DISCORD_OWNER_ID", ""),
+        discord_guild_id=e("DISCORD_GUILD_ID", ""),
     )

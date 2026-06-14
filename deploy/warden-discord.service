@@ -1,5 +1,5 @@
 [Unit]
-Description=warden discord poller — approval replies via Discord (no public webhook)
+Description=warden discord poller — approval replies + /slash commands via Discord (no public webhook)
 After=network-online.target
 Wants=network-online.target
 

@@ -108,3 +108,53 @@ def fetch_messages(config: Config, after: str | None = None, limit: int = 50) ->
     resp = _request("GET", config.discord_bot_token,
                     f"{API}/channels/{config.discord_channel_id}/messages", params=params)
     return resp.json()
+
+
+# --- slash (application) commands ---------------------------------------------
+# A bot's application id equals its user id, so /applications/@me resolves it from
+# the token alone — no extra config. Commands registered to a guild appear
+# instantly; global commands can take up to an hour to propagate.
+
+DEFERRED_RESPONSE = 5  # ACK an interaction now, edit in the real answer later
+
+
+_APP_ID: str | None = None
+
+
+def application_id(config: Config) -> str:
+    global _APP_ID
+    if _APP_ID is None:
+        resp = _request("GET", config.discord_bot_token, f"{API}/applications/@me")
+        _APP_ID = str(resp.json()["id"])
+    return _APP_ID
+
+
+def register_commands(config: Config, commands: list[dict]) -> str:
+    """Bulk-overwrite warden's slash commands (idempotent). Targets the guild in
+    DISCORD_GUILD_ID when set (instant); otherwise registers globally. Returns
+    the scope used so the caller can log it."""
+    app_id = application_id(config)
+    if config.discord_guild_id:
+        url = f"{API}/applications/{app_id}/guilds/{config.discord_guild_id}/commands"
+        scope = f"guild {config.discord_guild_id}"
+    else:
+        url = f"{API}/applications/{app_id}/commands"
+        scope = "global (~1h to appear)"
+    _request("PUT", config.discord_bot_token, url, json=commands)
+    return scope
+
+
+def interaction_defer(interaction_id: str, token: str) -> None:
+    """ACK an interaction within Discord's 3s window with a 'thinking…' state, so
+    a slow command (diagnose) doesn't show 'application did not respond'. The
+    callback endpoint is authenticated by the interaction token in the URL, not
+    the bot token."""
+    httpx.post(f"{API}/interactions/{interaction_id}/{token}/callback",
+               json={"type": DEFERRED_RESPONSE}, timeout=30).raise_for_status()
+
+
+def interaction_respond(config: Config, token: str, text: str) -> None:
+    """Fill in (edit) the deferred response with the command's actual output."""
+    app_id = application_id(config)
+    httpx.patch(f"{API}/webhooks/{app_id}/{token}/messages/@original",
+                json={"content": text[:2000]}, timeout=30).raise_for_status()
