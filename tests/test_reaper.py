@@ -5,13 +5,15 @@ from warden.backends.replay import ReplayBackend
 from warden.sentinel.reaper import reap_completed_torrents
 
 
-def _torrent(tid: int, name: str, done: float, h: str) -> dict:
+def _torrent(tid: int, name: str, done: float, h: str,
+             download_dir: str = "/downloads/complete") -> dict:
     return {"id": tid, "name": name, "percentDone": done, "hashString": h,
-            "peersConnected": 20, "status": 6}
+            "peersConnected": 20, "status": 6, "downloadDir": download_dir}
 
 
-def _backend(torrents, arr_queue=None):
-    return ReplayBackend({"torrents": torrents, "arr_queue": arr_queue or {}})
+def _backend(torrents, arr_queue=None, categories=("tv-sonarr", "radarr")):
+    return ReplayBackend({"torrents": torrents, "arr_queue": arr_queue or {},
+                          "arr_categories": list(categories)})
 
 
 def test_completed_untracked_torrent_is_removed_keeping_data(config, store, channel):
@@ -35,6 +37,15 @@ def test_completed_torrent_still_importing_is_kept(config, store, channel):
         [_torrent(1, "Importing.Movie", 1.0, "abc")],
         arr_queue={"radarr": [{"download_id": "ABC", "status": "completed"}]},
     )
+    assert reap_completed_torrents(config, backend, store, channel) == []
+    assert backend.actions_taken == []
+
+
+def test_arr_managed_torrent_in_category_dir_is_kept(config, store, channel):
+    # imported already (gone from queue) but sitting in the tv-sonarr category —
+    # Sonarr owns its cleanup, so warden must not yank it.
+    backend = _backend([_torrent(1, "Some.Show.S01E01", 1.0, "DEF",
+                                 download_dir="/downloads/complete/tv-sonarr")])
     assert reap_completed_torrents(config, backend, store, channel) == []
     assert backend.actions_taken == []
 

@@ -149,7 +149,7 @@ class LiveBackend:
             "method": "torrent-get",
             "arguments": {"fields": [
                 "id", "name", "hashString", "percentDone", "peersConnected",
-                "activityDate", "addedDate", "errorString", "status",
+                "activityDate", "addedDate", "errorString", "status", "downloadDir",
             ]},
         })
         now = time.time()
@@ -192,6 +192,22 @@ class LiveBackend:
             "error_message": r.get("errorMessage"),
             "size_left": r.get("sizeleft"),
         } for r in records]
+
+    def arr_categories(self) -> set[str]:
+        """Download-client categories the *arr apps assign (e.g. 'tv-sonarr',
+        'radarr'). A torrent landing in such a category subdir is *arr-managed —
+        Sonarr/Radarr own its import + cleanup, so the reaper leaves it alone."""
+        cats: set[str] = set()
+        for app in ("sonarr", "radarr"):
+            url, key = self._arr(app)
+            resp = httpx.get(f"{url}/api/v3/downloadclient",
+                             headers={"X-Api-Key": key}, timeout=30)
+            resp.raise_for_status()
+            for client in resp.json():
+                for f in client.get("fields", []):
+                    if str(f.get("name", "")).lower().endswith("category") and f.get("value"):
+                        cats.add(str(f["value"]))
+        return cats
 
     def arr_blocklist_and_research(self, app: str, queue_ids: list[int]) -> str:
         url, key = self._arr(app)
