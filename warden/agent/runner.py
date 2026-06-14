@@ -133,11 +133,17 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
     # 'monitoring' stays open so the sentinel won't re-open a duplicate
 
     emoji = {"resolved": "✅", "monitoring": "👀"}.get(status, "⚠️")
-    channel.send(
-        f"{emoji} warden incident #{incident_id} [{status}] "
-        f"{run_result.get('title', incident['summary'])}"
-        + (f" (cost ${cost:.2f})" if cost else "")
-    )
+    text = (f"{emoji} warden incident #{incident_id} [{status}] "
+            f"{run_result.get('title', incident['summary'])}"
+            + (f" (cost ${cost:.2f})" if cost else ""))
+    # When warden couldn't (or chose not to) fix it autonomously, offer one-tap
+    # follow-ups. A resolved incident needs none.
+    buttons = None
+    if status in ("escalated", "monitoring"):
+        from warden.notifier.components import incident_buttons
+        container = (incident.get("details") or {}).get("container", "")
+        buttons = incident_buttons(incident_id, incident["category"], container)
+    channel.send(text, buttons)
     return run_result
 
 
