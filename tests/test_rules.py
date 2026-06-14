@@ -22,6 +22,29 @@ def test_container_down_detected():
     assert "container_down:filebrowser" in keys
 
 
+def test_completed_oneshot_job_not_flagged():
+    # a one-shot job (restart=no) that finished cleanly (exit 0) is not a failure
+    snap = {"docker_ps": [{"name": "affine_migration_job", "state": "exited",
+                           "status": "Exited (0) 6 hours ago", "restart_policy": "no"}]}
+    assert not [a for a in evaluate(snap, cfg()) if a.category == "container_down"]
+
+
+def test_failed_oneshot_job_still_flagged():
+    # same job but it errored out (non-zero) — that's worth knowing
+    snap = {"docker_ps": [{"name": "affine_migration_job", "state": "exited",
+                           "status": "Exited (1) 6 hours ago", "restart_policy": "no"}]}
+    assert "container_down:affine_migration_job" in [a.key for a in evaluate(snap, cfg())]
+
+
+def test_down_service_with_restart_policy_still_flagged():
+    # a real service (restart=unless-stopped) that's exited — even cleanly — should
+    # still be flagged so warden can restart it
+    snap = {"docker_ps": [{"name": "filebrowser", "state": "exited",
+                           "status": "Exited (0) 4 minutes ago",
+                           "restart_policy": "unless-stopped"}]}
+    assert "container_down:filebrowser" in [a.key for a in evaluate(snap, cfg())]
+
+
 def test_ignored_containers_skipped():
     anomalies = evaluate(snapshot_of("container-down-filebrowser"),
                          cfg(ignored_containers=["filebrowser"]))

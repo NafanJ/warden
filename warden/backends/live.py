@@ -36,10 +36,25 @@ class LiveBackend:
     def docker_ps(self) -> list[dict[str, Any]]:
         raw = _run(["docker", "ps", "-a", "--format", "{{json .}}"])
         rows = [json.loads(line) for line in raw.splitlines() if line.strip().startswith("{")]
-        return [
+        out = [
             {"name": r.get("Names"), "image": r.get("Image"), "status": r.get("Status"), "state": r.get("State")}
             for r in rows
         ]
+        # Restart policy distinguishes a completed one-shot job (restart=no) from a
+        # down service that should be running — the rules use it to avoid paging on
+        # finished jobs. One inspect call covers every container.
+        names = [c["name"] for c in out if c["name"]]
+        if names:
+            info = _run(["docker", "inspect", "--format",
+                         "{{.Name}}\t{{.HostConfig.RestartPolicy.Name}}", *names])
+            policy = {}
+            for line in info.splitlines():
+                if "\t" in line:
+                    n, _, pol = line.partition("\t")
+                    policy[n.lstrip("/").strip()] = pol.strip()
+            for c in out:
+                c["restart_policy"] = policy.get(c["name"], "")
+        return out
 
     def container_logs(self, name: str, lines: int = 100) -> str:
         out = subprocess.run(

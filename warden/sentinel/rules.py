@@ -5,10 +5,26 @@ anomaly key (deduplicated against currently-open incidents).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from warden.config import Config
+
+_EXIT_CODE = re.compile(r"Exited \((\d+)\)")
+
+
+def _completed_job(c: dict[str, Any]) -> bool:
+    """A finished one-shot job, not a downed service: exited with code 0 and a
+    restart policy of 'no' (e.g. a compose migration). A real service that's down
+    has a restart policy (always/unless-stopped) and is still flagged, even on a
+    clean exit, so warden can bring it back."""
+    if (c.get("state") or "").lower() != "exited":
+        return False
+    if (c.get("restart_policy") or "").lower() != "no":
+        return False
+    m = _EXIT_CODE.search(c.get("status") or "")
+    return bool(m) and int(m.group(1)) == 0
 
 
 @dataclass
@@ -36,6 +52,8 @@ def _containers(snapshot: dict[str, Any], config: Config) -> list[Anomaly]:
         name = c.get("name") or ""
         if name in config.ignored_containers:
             continue
+        if _completed_job(c):
+            continue  # a finished one-shot job, not a downed service
         state = (c.get("state") or "").lower()
         status = c.get("status") or ""
         unhealthy = "unhealthy" in status.lower()
