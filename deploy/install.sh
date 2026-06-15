@@ -61,6 +61,14 @@ systemctl enable --now warden-summary.timer
 # regardless of whether WhatsApp approvals are configured.
 systemctl enable --now warden-webhook.service
 
+# The timers spawn a fresh `python -m` each run, so they pick up new code on
+# their own. The long-running services (discord poller, webhook) load the code
+# once at startup, so a code update needs an explicit restart — otherwise live
+# commands like /status keep running the old code after a deploy. try-restart
+# only acts if the unit is already active (won't start an unconfigured Discord).
+systemctl try-restart warden-discord.service
+systemctl try-restart warden-webhook.service
+
 echo
 echo "warden installed. Sentinel timer + webhook (127.0.0.1:8484) active."
 echo "Point Plex at it: Settings → Webhooks → http://localhost:8484/plex"
