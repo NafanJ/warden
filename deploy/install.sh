@@ -57,10 +57,13 @@ cp "$DEST/deploy/warden-summary.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now warden-sentinel.timer
 systemctl enable --now warden-summary.timer
+# The webhook also serves the Plex playback endpoint (/plex), so enable it
+# regardless of whether WhatsApp approvals are configured.
+systemctl enable --now warden-webhook.service
 
 echo
-echo "warden installed. Sentinel timer active."
+echo "warden installed. Sentinel timer + webhook (127.0.0.1:8484) active."
+echo "Point Plex at it: Settings → Webhooks → http://localhost:8484/plex"
 echo "Enable the approval channel once its keys are set in $DEST/.env:"
 echo "  Discord (recommended):  systemctl enable --now warden-discord.service"
-echo "  WhatsApp (alternative): systemctl enable --now warden-webhook.service"
 echo "Status: systemctl list-timers warden* ; tail -f $DEST/state/heartbeat.log"

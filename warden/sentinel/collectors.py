@@ -6,6 +6,7 @@ from typing import Any
 
 from warden.backends import Backend
 from warden.config import Config
+from warden.presence import read_presence
 
 
 def collect_snapshot(backend: Backend, config: Config) -> dict[str, Any]:
@@ -27,4 +28,5 @@ def collect_snapshot(backend: Backend, config: Config) -> dict[str, Any]:
                                "radarr": backend.arr_queue("radarr")})
     if config.public_urls:
         safe("url_checks", lambda: backend.check_urls(config.public_urls))
+    safe("plex_presence", lambda: read_presence(config))
     return snapshot

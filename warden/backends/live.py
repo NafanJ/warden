@@ -184,6 +184,22 @@ class LiveBackend:
         })
         return f"removed torrents {ids} (delete_data={delete_data})"
 
+    def set_download_throttle(self, on: bool) -> str:
+        """Toggle Transmission's alt-speed ('turtle') mode — a reversible global
+        bandwidth cap. Used to protect Plex playback while someone is streaming."""
+        self._tx_request({
+            "method": "session-set",
+            "arguments": {"alt-speed-enabled": bool(on)},
+        })
+        return f"alt-speed {'enabled' if on else 'disabled'}"
+
+    def download_throttled(self) -> bool:
+        resp = self._tx_request({
+            "method": "session-get",
+            "arguments": {"fields": ["alt-speed-enabled"]},
+        })
+        return bool(resp["arguments"]["alt-speed-enabled"])
+
     # --- sonarr / radarr ---
     def _arr(self, app: str) -> tuple[str, str]:
         if app == "sonarr":

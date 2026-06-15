@@ -26,6 +26,15 @@ def main() -> int:
     backend = LiveBackend(config)
     store = Store(config.state_dir / "warden.db")
 
+    # Self-heal the download throttle against live Plex activity before snapshotting,
+    # so a dropped Plex "stop" webhook can't leave Transmission throttled forever,
+    # and the snapshot below captures fresh presence for any incident post-mortem.
+    try:
+        from warden.webhook.plex import reconcile as reconcile_throttle
+        reconcile_throttle(config, backend)
+    except Exception:
+        pass
+
     snapshot = collect_snapshot(backend, config)
     anomalies = evaluate(snapshot, config)
 

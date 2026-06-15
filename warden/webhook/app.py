@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -19,6 +20,7 @@ from warden.config import load_config
 from warden.notifier import get_channel
 from warden.store import Store
 from warden.webhook.approvals import handle_reply
+from warden.webhook.plex import handle_plex_event
 
 app = FastAPI(title="warden webhook")
 
@@ -61,6 +63,24 @@ async def receive(request: Request):
                 reply = handle_reply(message["text"]["body"], config, backend, store, channel)
                 channel.send(reply)
     return {"status": "ok"}
+
+
+@app.post("/plex")
+async def plex(request: Request):
+    """Plex Pass playback webhook. Plex POSTs multipart/form-data with a JSON
+    `payload` field. Reachable only on 127.0.0.1 (Plex is host-networked), with
+    an optional shared-secret token in the URL for defence in depth."""
+    if config.plex_webhook_token and request.query_params.get("token") != config.plex_webhook_token:
+        raise HTTPException(status_code=403, detail="bad token")
+    form = await request.form()
+    raw = form.get("payload")
+    if not raw:
+        return {"status": "no payload"}
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="bad payload")
+    return handle_plex_event(payload, config, backend)
 
 
 @app.get("/healthz")

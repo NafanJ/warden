@@ -1,5 +1,5 @@
 [Unit]
-Description=warden webhook — WhatsApp approval endpoint
+Description=warden webhook — WhatsApp approvals + Plex playback events (127.0.0.1:8484)
 After=network-online.target
 Wants=network-online.target
 

@@ -15,6 +15,7 @@ class ReplayBackend:
     def __init__(self, snapshot: dict[str, Any]):
         self.snapshot = snapshot
         self.actions_taken: list[dict[str, Any]] = []
+        self._throttled = bool(snapshot.get("downloads_throttled", False))
 
     @classmethod
     def from_fixture(cls, path: str | Path) -> "ReplayBackend":
@@ -62,6 +63,13 @@ class ReplayBackend:
 
     def remove_torrents(self, ids: list[int], delete_data: bool = False) -> str:
         return self._record("remove_torrents", ids=ids, delete_data=delete_data)
+
+    def set_download_throttle(self, on: bool) -> str:
+        self._throttled = bool(on)
+        return self._record("set_download_throttle", on=bool(on))
+
+    def download_throttled(self) -> bool:
+        return self._throttled
 
     # --- sonarr / radarr ---
     def arr_queue(self, app: str) -> list[dict[str, Any]]:

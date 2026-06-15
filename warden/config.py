@@ -32,6 +32,10 @@ class Config:
     transmission_pass: str = ""
     tautulli_url: str = "http://localhost:8181"
     tautulli_api_key: str = ""
+
+    # Plex webhook → throttle Transmission while anyone is streaming.
+    plex_throttle_downloads: bool = True
+    plex_webhook_token: str = ""  # optional shared secret in the webhook URL (?token=)
     # containers serving live Plex streams — a restart while people are watching
     # is escalated to owner approval instead of done autonomously.
     stream_containers: list[str] = field(default_factory=lambda: ["plex"])
@@ -125,6 +129,8 @@ def load_config(env_file: str | Path | None = None) -> Config:
         transmission_pass=e("TRANSMISSION_PASS", ""),
         tautulli_url=e("TAUTULLI_URL", "http://localhost:8181"),
         tautulli_api_key=e("TAUTULLI_API_KEY", ""),
+        plex_throttle_downloads=e("PLEX_THROTTLE_DOWNLOADS", "true").lower() in ("1", "true", "yes", "on"),
+        plex_webhook_token=e("PLEX_WEBHOOK_TOKEN", ""),
         stream_containers=_csv(e("STREAM_CONTAINERS", "plex")),
         disk_paths=_csv(e("DISK_PATHS", "/,/mnt/Modi")),
         disk_threshold_pct=int(e("DISK_THRESHOLD_PCT", "92")),
