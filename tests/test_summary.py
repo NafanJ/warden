@@ -72,6 +72,37 @@ def test_status_all_clear_when_healthy(config, store):
     assert "all clear ✅" in format_status(g)
 
 
+def test_completed_one_shot_job_not_reported_down(config, store):
+    # a migration job that exited 0 with restart policy 'no' is finished, not down
+    snap = {**SNAP, "docker_ps": [
+        {"name": "plex", "state": "running", "status": "Up"},
+        {"name": "affine_migration_job", "state": "exited",
+         "status": "Exited (0) 2 hours ago", "restart_policy": "no"}]}
+    g = gather(config, ReplayBackend(snap), store)
+    text = format_status(g)
+    assert "affine_migration_job" not in text     # finished job, not flagged down
+    assert "down:" not in text
+
+
+def test_downloads_broken_out_by_state_with_sizes(config, store):
+    GB = 1024 ** 3
+    snap = {**SNAP, "torrents": [
+        {"name": "Seeding.Show.S01", "hashString": "a", "percentDone": 1.0, "status": 6, "totalSize": 6 * GB},
+        {"name": "Downloading.Movie", "hashString": "b", "percentDone": 0.45, "status": 4, "totalSize": 4 * GB,
+         "age_hours": 2, "inactive_hours": 0.1, "peersConnected": 5},
+        {"name": "Queued.Thing", "hashString": "c", "percentDone": 0.0, "status": 3, "totalSize": 2 * GB},
+        {"name": "Stuck.Release", "hashString": "d", "percentDone": 0.1, "status": 4, "totalSize": 3 * GB,
+         "age_hours": 10, "inactive_hours": 7, "peersConnected": 0},
+    ]}
+    g = gather(config, ReplayBackend(snap), store)
+    text = format_status(g)
+    assert "Downloads:   4 torrent(s)" in text
+    assert "🌱 seeding (1 · 6.0 GB)" in text and "Seeding.Show.S01" in text
+    assert "⬇️ downloading (1 · 4.0 GB)" in text and "Downloading.Movie — 4.0 GB · 45%" in text
+    assert "⏳ todo (1 · 2.0 GB)" in text
+    assert "⚠️ stalled (1 · 3.0 GB)" in text and "7h idle" in text
+
+
 def test_summary_lists_auto_fixes(config, store):
     store.audit("container_restart", {"name": "plex"}, 1, "allowed")
     store.audit("remove_torrents", {"ids": [1], "delete_data": False}, 1, "allowed")

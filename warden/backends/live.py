@@ -165,6 +165,7 @@ class LiveBackend:
             "arguments": {"fields": [
                 "id", "name", "hashString", "percentDone", "peersConnected",
                 "activityDate", "addedDate", "errorString", "status", "downloadDir",
+                "totalSize",
             ]},
         })
         now = time.time()

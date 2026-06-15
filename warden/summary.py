@@ -17,8 +17,78 @@ from warden.backends.live import LiveBackend
 from warden.config import Config, load_config
 from warden.notifier import Channel, get_channel
 from warden.sentinel.collectors import collect_snapshot
-from warden.sentinel.rules import evaluate
+from warden.sentinel.rules import _completed_job, evaluate
 from warden.store import Store
+
+
+def _human_size(n: float) -> str:
+    n = float(n or 0)
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit in ("B", "KB") else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
+def _is_stalled(t: dict[str, Any], config: Config) -> bool:
+    """Same definition the sentinel's stall rule uses: an incomplete torrent old
+    enough to judge, with no piece activity for the threshold window."""
+    inactive = t.get("inactive_hours")
+    return ((t.get("percentDone") or 0) < 1.0
+            and (t.get("age_hours") or 0) >= config.stall_min_age_hours
+            and inactive is not None and inactive >= config.stall_threshold_hours)
+
+
+def categorize_downloads(torrents: list[dict[str, Any]], config: Config) -> dict[str, list[dict]]:
+    """Split torrents into todo / downloading / seeding / stalled, each a list of
+    {name, size, pct, idle} for rendering."""
+    buckets: dict[str, list[dict]] = {"downloading": [], "stalled": [], "seeding": [], "todo": []}
+    for t in torrents:
+        done = (t.get("percentDone") or 0) >= 1.0
+        if not done and _is_stalled(t, config):
+            key = "stalled"
+        elif done:
+            key = "seeding"
+        elif t.get("status") == 4:  # Transmission status 4 = downloading
+            key = "downloading"
+        else:  # queued / paused / checking — not yet actively downloading or done
+            key = "todo"
+        buckets[key].append({
+            "name": t.get("name") or "?",
+            "size": t.get("totalSize") or 0,
+            "pct": round((t.get("percentDone") or 0) * 100),
+            "idle": t.get("inactive_hours"),
+        })
+    return buckets
+
+
+# label + per-item suffix renderer for each bucket, in display order
+_BUCKETS = [
+    ("downloading", "⬇️ downloading", lambda i: f" · {i['pct']}%"),
+    ("stalled", "⚠️ stalled", lambda i: f" · {i['pct']}%" + (f" · {i['idle']}h idle" if i.get("idle") is not None else "")),
+    ("seeding", "🌱 seeding", lambda i: ""),
+    ("todo", "⏳ todo", lambda i: ""),
+]
+
+
+def _downloads_lines(g: dict[str, Any]) -> list[str]:
+    buckets = (g.get("downloads") or {}).get("buckets") or {}
+    total = sum(len(v) for v in buckets.values())
+    total_size = sum(i["size"] for v in buckets.values() for i in v)
+    head = f"Downloads:   {total} torrent(s)" + (f" · {_human_size(total_size)}" if total else "")
+    lines = [head]
+    for key, label, suffix in _BUCKETS:
+        items = buckets.get(key) or []
+        if not items:
+            continue
+        bsize = _human_size(sum(i["size"] for i in items))
+        lines.append(f"  {label} ({len(items)} · {bsize})")
+        for i in items[:6]:
+            name = i["name"] if len(i["name"]) <= 48 else i["name"][:47] + "…"
+            lines.append(f"     • {name} — {_human_size(i['size'])}{suffix(i)}")
+        if len(items) > 6:
+            lines.append(f"     …and {len(items) - 6} more")
+    return lines
 
 
 def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> dict[str, Any]:
@@ -29,7 +99,12 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
 
     containers = snapshot.get("docker_ps") or []
     up = sum(1 for c in containers if (c.get("state") or "").lower() == "running")
-    down = [c.get("name") for c in containers if (c.get("state") or "").lower() != "running"]
+    # "down" = genuinely down services only — exclude finished one-shot jobs (e.g.
+    # affine_migration_job, which exits 0 by design) and explicitly ignored ones.
+    down = [c.get("name") for c in containers
+            if (c.get("state") or "").lower() != "running"
+            and not _completed_job(c)
+            and c.get("name") not in config.ignored_containers]
 
     plex = {"stream_count": 0, "transcode_count": 0, "bandwidth_mbps": 0.0, "sessions": []}
     if config.tautulli_api_key:
@@ -56,6 +131,7 @@ def gather(config: Config, backend: Backend, store: Store, hours: int = 24) -> d
         "disk": snapshot.get("disk_usage") or [],
         "disk_threshold": config.disk_threshold_pct,
         "torrents": len(snapshot.get("torrents") or []),
+        "downloads": {"buckets": categorize_downloads(snapshot.get("torrents") or [], config)},
         "stalled": sum(1 for a in anomalies if a.category == "stalled_download"),
         "collector_errors": snapshot.get("collector_errors") or {},
         "tautulli": bool(config.tautulli_api_key),
@@ -118,8 +194,8 @@ def format_status(g: dict[str, Any]) -> str:
         f"Containers:  {g['containers_up']}/{g['containers_total']} up"
         + (f"  ⚠️ down: {', '.join(down)}" if down else ""),
         f"Disk:        {_disk_line(g)}",
-        f"Downloads:   {g['torrents']} torrent(s), {g['stalled']} stalled",
     ]
+    lines += _downloads_lines(g)
     if g.get("tautulli"):
         p = g["plex"]
         head = f"{p['stream_count']} stream(s)"
@@ -156,7 +232,7 @@ def format_summary(g: dict[str, Any], label: str = "daily") -> str:
         f"📊 **warden {label} — {g['date']}**",
         f"Containers:  {g['containers_up']}/{g['containers_total']} up",
         f"Disk:        {disk}",
-        f"Downloads:   {g['torrents']} torrent(s), {g['stalled']} stalled",
+        *_downloads_lines(g),
         "",
         f"Today:       {len(g['incidents'])} incident(s)"
         + (f" — {', '.join(sorted({i['category'] for i in g['incidents']}))}" if g["incidents"] else ""),
