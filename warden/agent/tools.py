@@ -46,7 +46,11 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
             return _error(exc)
 
     @tool("container_inspect",
-          "Inspect a container: state, exit code, OOM flag, restart count/policy, memory limit.",
+          "Inspect a container: status, health, exit code, OOM flag, restart_count, "
+          "start/finish times, policy, memory limit. A non-zero restart_count means a "
+          "crash loop even if it currently reads healthy — exit_code/health describe only "
+          "the latest start; read the 'note' field, and trust a 'Restarting (N)' in the "
+          "incident snapshot over a now-healthy live read.",
           {"name": str})
     async def container_inspect(args):
         try:

@@ -11,7 +11,7 @@ from typing import Any
 
 from warden.config import Config
 
-_EXIT_CODE = re.compile(r"Exited \((\d+)\)")
+_EXIT_CODE = re.compile(r"(?:Exited|Restarting) \((\d+)\)")
 
 
 def _completed_job(c: dict[str, Any]) -> bool:
@@ -59,13 +59,28 @@ def _containers(snapshot: dict[str, Any], config: Config) -> list[Anomaly]:
         unhealthy = "unhealthy" in status.lower()
         restarting = state == "restarting"
         down = state in ("exited", "dead", "created", "paused")
-        if unhealthy or restarting or down:
-            out.append(Anomaly(
-                key=f"container_down:{name}",
-                category="container_down",
-                summary=f"Container {name} is {'unhealthy' if unhealthy else state} ({status})",
-                details={"container": name, "state": state, "status": status},
-            ))
+        if not (unhealthy or restarting or down):
+            continue
+        m = _EXIT_CODE.search(status)
+        exit_code = int(m.group(1)) if m else None
+        restart_count = c.get("restart_count")
+        if restarting:
+            # Docker is bouncing it via its restart policy: a crash loop. The exit
+            # code (e.g. 139 = SIGSEGV) only shows in this live status — a later
+            # inspect, once the loop heals to 'running', reports exit 0 — so name it
+            # plainly here and carry the code into the incident as ground truth.
+            condition = "in a crash loop"
+        elif unhealthy:
+            condition = "unhealthy"
+        else:
+            condition = state
+        out.append(Anomaly(
+            key=f"container_down:{name}",
+            category="container_down",
+            summary=f"Container {name} is {condition} ({status})",
+            details={"container": name, "state": state, "status": status,
+                     "exit_code": exit_code, "restart_count": restart_count},
+        ))
     return out
 
 

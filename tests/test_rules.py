@@ -36,6 +36,21 @@ def test_failed_oneshot_job_still_flagged():
     assert "container_down:affine_migration_job" in [a.key for a in evaluate(snap, cfg())]
 
 
+def test_restart_loop_flagged_as_crash_loop_with_exit_code():
+    # a container Docker is bouncing: name it a crash loop and capture the exit
+    # code (139 = SIGSEGV) from the live status — a later inspect would read exit 0
+    snap = {"docker_ps": [{"name": "immich-server", "state": "restarting",
+                           "status": "Restarting (139) 10 seconds ago",
+                           "restart_policy": "unless-stopped", "restart_count": 13}]}
+    anomalies = [a for a in evaluate(snap, cfg()) if a.category == "container_down"]
+    assert len(anomalies) == 1
+    a = anomalies[0]
+    assert a.key == "container_down:immich-server"
+    assert "crash loop" in a.summary
+    assert a.details["exit_code"] == 139
+    assert a.details["restart_count"] == 13
+
+
 def test_down_service_with_restart_policy_still_flagged():
     # a real service (restart=unless-stopped) that's exited — even cleanly — should
     # still be flagged so warden can restart it

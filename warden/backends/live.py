@@ -27,6 +27,53 @@ def _run(cmd: list[str], timeout: int = 30) -> str:
     return out.stdout
 
 
+def _inspect_view(name: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Compact, decision-oriented view of `docker inspect` output.
+
+    Crash-loop trap: when a container is bouncing via its restart policy, the
+    crash exit code (e.g. 139 = SIGSEGV) only shows while it's momentarily
+    'restarting'. Once a start succeeds, State.ExitCode resets to 0 and Health
+    reads 'healthy' — so an inspect run *after* the loop heals looks clean and
+    hides the crash. restart_count survives, so we surface it prominently and,
+    when the container reads healthy but has restarted, attach a note so the
+    agent doesn't mistake a recovered crash loop for a false alarm.
+    """
+    state = data.get("State", {})
+    host_cfg = data.get("HostConfig", {})
+    status = state.get("Status")              # running | restarting | exited | …
+    exit_code = state.get("ExitCode")
+    restart_count = data.get("RestartCount")
+    health = (state.get("Health") or {}).get("Status")
+
+    note = None
+    if restart_count and status == "restarting":
+        note = (f"Crash loop: Docker is bouncing this container (restarted "
+                f"{restart_count}x). exit_code {exit_code} is the crash signal "
+                f"(139 = SIGSEGV, 137 = SIGKILL/OOM).")
+    elif restart_count and status == "running" and not exit_code:
+        note = (f"Running now, but has restarted {restart_count}x. exit_code/"
+                f"health reflect the latest (successful) start, not the crashes "
+                f"— a 'Restarting (N)' in the incident snapshot means it was "
+                f"crash-looping with exit code N and has since recovered. Treat "
+                f"that as a real crash loop, not a false alarm; check logs across "
+                f"the restarts for the cause (a silent native SIGSEGV logs nothing).")
+
+    return {
+        "name": name,
+        "status": status,
+        "running": state.get("Running"),
+        "health": health,
+        "exit_code": exit_code,
+        "oom_killed": state.get("OOMKilled"),
+        "restart_count": restart_count,
+        "started_at": state.get("StartedAt"),
+        "finished_at": state.get("FinishedAt"),
+        "restart_policy": (host_cfg.get("RestartPolicy") or {}).get("Name"),
+        "memory_limit": host_cfg.get("Memory"),
+        "note": note,
+    }
+
+
 class LiveBackend:
     def __init__(self, config: Config):
         self.config = config
@@ -42,18 +89,28 @@ class LiveBackend:
         ]
         # Restart policy distinguishes a completed one-shot job (restart=no) from a
         # down service that should be running — the rules use it to avoid paging on
-        # finished jobs. One inspect call covers every container.
+        # finished jobs. RestartCount surfaces a crash loop (a container Docker is
+        # bouncing repeatedly) even when this poll catches it momentarily 'running'.
+        # One inspect call covers every container.
         names = [c["name"] for c in out if c["name"]]
         if names:
             info = _run(["docker", "inspect", "--format",
-                         "{{.Name}}\t{{.HostConfig.RestartPolicy.Name}}", *names])
-            policy = {}
+                         "{{.Name}}\t{{.HostConfig.RestartPolicy.Name}}\t{{.RestartCount}}",
+                         *names])
+            extra: dict[str, tuple[str, int | None]] = {}
             for line in info.splitlines():
-                if "\t" in line:
-                    n, _, pol = line.partition("\t")
-                    policy[n.lstrip("/").strip()] = pol.strip()
+                parts = line.split("\t")
+                if len(parts) >= 3:
+                    name = parts[0].lstrip("/").strip()
+                    try:
+                        count: int | None = int(parts[2].strip())
+                    except ValueError:
+                        count = None
+                    extra[name] = (parts[1].strip(), count)
             for c in out:
-                c["restart_policy"] = policy.get(c["name"], "")
+                pol, count = extra.get(c["name"], ("", None))
+                c["restart_policy"] = pol
+                c["restart_count"] = count
         return out
 
     def container_logs(self, name: str, lines: int = 100) -> str:
@@ -67,18 +124,7 @@ class LiveBackend:
         raw = _run(["docker", "inspect", name])
         if raw.startswith("ERROR"):
             return {"error": raw}
-        data = json.loads(raw)[0]
-        state = data.get("State", {})
-        host_cfg = data.get("HostConfig", {})
-        return {
-            "name": name,
-            "state": state,
-            "restart_count": data.get("RestartCount"),
-            "oom_killed": state.get("OOMKilled"),
-            "exit_code": state.get("ExitCode"),
-            "memory_limit": host_cfg.get("Memory"),
-            "restart_policy": host_cfg.get("RestartPolicy"),
-        }
+        return _inspect_view(name, json.loads(raw)[0])
 
     def container_restart(self, name: str) -> str:
         return _run(["docker", "restart", name], timeout=120) or f"restarted {name}"

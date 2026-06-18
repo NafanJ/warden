@@ -38,7 +38,11 @@ TOOL_SCHEMAS: list[dict] = [
     _fn("container_logs", "Tail recent logs from a container.",
         {"name": {"type": "string"}, "lines": {"type": "integer", "default": 100}}, ["name"]),
     _fn("container_inspect",
-        "Inspect a container: state, exit code, OOM flag, restart count/policy, memory limit.",
+        "Inspect a container: status, health, exit code, OOM flag, restart_count, "
+        "start/finish times, policy, memory limit. A non-zero restart_count means a "
+        "crash loop even if it currently reads healthy — exit_code/health describe only "
+        "the latest start; read the 'note' field, and trust a 'Restarting (N)' in the "
+        "incident snapshot over a now-healthy live read.",
         {"name": {"type": "string"}}, ["name"]),
     _fn("container_restart", "Restart a container (Tier 1, reversible).",
         {"name": {"type": "string"}}, ["name"]),
