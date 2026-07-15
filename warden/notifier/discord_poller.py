@@ -24,8 +24,21 @@ from warden.webhook.approvals import REPLY, handle_reply
 POLL_SECONDS = 5
 
 
+def strip_mention(content: str, bot_id: str) -> str | None:
+    """The message text with the bot's @mention removed, or None if the bot
+    isn't mentioned. Checks the literal <@id> token in the content (not the
+    mentions array), so a Discord *reply* to a warden message — which lists the
+    bot in mentions without carrying the token — is never mistaken for a task."""
+    tokens = (f"<@{bot_id}>", f"<@!{bot_id}>")
+    if not any(t in content for t in tokens):
+        return None
+    for t in tokens:
+        content = content.replace(t, " ")
+    return " ".join(content.split())
+
+
 def process_batch(messages: list[dict], config: Config, backend: Backend,
-                  store: Store, channel: Channel) -> str | None:
+                  store: Store, channel: Channel, bot_id: str | None = None) -> str | None:
     """Dispatch owner approval replies in a batch of Discord messages.
 
     Returns the highest message id seen so the caller can advance its poll
@@ -38,11 +51,17 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
         if config.discord_owner_id and author_id != config.discord_owner_id:
             continue  # only the owner may approve / query
         content = (msg.get("content") or "").strip()
+        mentioned = strip_mention(content, bot_id) if bot_id else None
+        if mentioned is not None:
+            content = mentioned or "status"  # a bare @warden gets the health readout
         parts = content.split(maxsplit=1)
         cmd = parts[0].lower() if parts else ""
         arg = parts[1] if len(parts) > 1 else ""
         is_command = cmd in ALIASES
         is_reply = bool(REPLY.match(content))
+        if mentioned is not None and not (is_command or is_reply):
+            # '@warden <anything else>' is the point of mentions: it's a task.
+            cmd, arg, is_command = "task", content, True
         if not (is_command or is_reply):
             continue  # ignore ordinary chatter — only commands / YES-NO <id>
 
@@ -131,12 +150,17 @@ def main() -> int:
     channel = get_channel(config)
 
     _start_gateway(config, backend, store, channel)  # native /slash commands
+    bot_id = None
+    try:  # the bot's user id equals its application id — needed to spot @mentions
+        bot_id = dc.application_id(config)
+    except Exception as exc:
+        print(f"could not resolve bot id ({exc}); @mentions disabled this run.")
     cursor = _starting_cursor(config)
     print(f"warden discord poller started (channel {config.discord_channel_id}, cursor {cursor}).")
     while True:
         try:
             messages = fetch_messages(config, after=cursor)
-            new_cursor = process_batch(messages, config, backend, store, channel)
+            new_cursor = process_batch(messages, config, backend, store, channel, bot_id)
             if new_cursor:
                 cursor = new_cursor
             process_reactions(config, backend, store, channel)  # one-tap ✅/❌

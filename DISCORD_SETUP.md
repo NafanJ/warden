@@ -22,7 +22,7 @@ agent queues Tier 2 action ──▶ bot posts alert + pre-adds ✅/❌
 3. On the same tab, enable **Message Content Intent** (so the bot can read your replies).
 4. **Installation** (or **OAuth2 → URL Generator**): scopes **`bot`** *and*
    **`applications.commands`** (the latter is required for the `/status`, `/diagnose`,
-   `/user-stats` slash commands to appear), permissions **View Channels** + **Send
+   `/task`, `/user-stats` slash commands to appear), permissions **View Channels** + **Send
    Messages** + **Read Message History**. Open the generated URL and add the bot to your
    server.
 
@@ -45,9 +45,9 @@ DISCORD_GUILD_ID=<your server id>   # optional: slash commands appear instantly 
 ```
 
 `DISCORD_GUILD_ID` (right-click the server icon → **Copy Server ID**) is optional. Set
-it and the `/status`, `/diagnose`, `/user-stats` commands register to that server
-instantly; leave it blank and they register globally, which can take up to an hour to
-show in the picker.
+it and the `/status`, `/diagnose`, `/task`, `/user-stats` commands register to that
+server instantly; leave it blank and they register globally, which can take up to an
+hour to show in the picker.
 
 ## 4. Run the poller
 
@@ -55,7 +55,7 @@ show in the picker.
 sudo systemctl enable --now warden-discord.service   # deploy/warden-discord.service
 # it runs: python -m warden.notifier.discord_poller
 # on start it (re)registers the slash commands and opens the gateway connection;
-# the log line "registered 3 slash command(s) to …" confirms it.
+# the log line "registered 4 slash command(s) to …" confirms it.
 journalctl -u warden-discord -f                       # watch it
 ```
 
@@ -89,6 +89,23 @@ to the downloads tree regardless). The bot posts the alert with **Approve/Reject
 buttons** (and ✅/❌ reactions as a fallback) — **tap Approve** and within a few seconds
 it executes, then edits the message to the outcome and removes the buttons. Tap Reject
 (or ❌, or type `NO <id>`) to cancel; typing `YES <id>` also works.
+
+## @mention tasks
+
+Once the poller is running you can also just **@mention the bot** with a job in plain
+language — `@warden sonarr looks stuck, sort it out`. That runs the same agent as an
+incident in your configured `WARDEN_MODE`: Tier 1 fixes execute autonomously, anything
+destructive posts an Approve/Reject prompt first, and the outcome lands in the channel.
+`@warden status` (any command word) runs that command; a bare `@warden` replies with
+status. Mentions ride the existing message poll, so they need nothing beyond steps 1–4
+(Message Content Intent, step 1.3, covers them).
+
+`@warden !full <task>` is the escape hatch: a **full Claude Code session on the host**
+(shell + file access, outside warden's tool sandbox). It requires
+`ENABLE_FULL_TASKS=true` in `.env`, and every task is queued for a one-tap approval
+before it starts — but understand what you're enabling: an approved Discord message can
+then run arbitrary commands on the machine. Keep the channel private and leave the flag
+off if in doubt.
 
 ## Notes
 

@@ -60,14 +60,23 @@ is the point: not a demo, a production log.
   problems the cooldown is holding quiet don't get forgotten. Free on quiet days; adds a
   short LLM narrative only when something actually happened.
 - **Channel commands** — owner-gated, two ways to invoke: native Discord **slash
-  commands** (`/status`, `/diagnose question:…`, `/user-stats user:…`) that show up in
-  the `/` picker with parameter hints, or the same words typed as plain messages. Slash
-  commands arrive as *interactions* over an outbound **Gateway** websocket (still no
-  inbound port), running alongside the message poller in one process. `status` gives a
-  live health readout (current issues + who's streaming on Plex + pending approvals),
-  `user-stats` returns Plex watch stats (no LLM), and `diagnose` spins up an on-demand,
-  read-only agent investigation — e.g. *"why is plex buffering"* — that reasons over the
-  live system and answers in the channel.
+  commands** (`/status`, `/diagnose question:…`, `/task instruction:…`,
+  `/user-stats user:…`) that show up in the `/` picker with parameter hints, or the same
+  words typed as plain messages. Slash commands arrive as *interactions* over an outbound
+  **Gateway** websocket (still no inbound port), running alongside the message poller in
+  one process. `status` gives a live health readout (current issues + who's streaming on
+  Plex + pending approvals), `user-stats` returns Plex watch stats (no LLM), and
+  `diagnose` spins up an on-demand, read-only agent investigation — e.g. *"why is plex
+  buffering"* — that reasons over the live system and answers in the channel.
+- **@mention tasks** — `@warden <anything>` hands warden a job in plain language
+  (*"@warden sonarr looks stuck, sort it out"*). It runs the same agent as an incident,
+  in the configured mode: Tier 1 fixes happen autonomously, Tier 2 queues an
+  Approve/Reject prompt, and the outcome posts back to the channel. A mention that's
+  just a command word (`@warden status`) runs that command; a bare `@warden` answers
+  with status. For work outside the 18-tool sandbox there's `@warden !full <task>`,
+  which — only if `ENABLE_FULL_TASKS=true` — queues a **full Claude Code session**
+  (shell + file access, budget-capped) that starts only after a one-tap owner approval
+  and posts a redacted summary when done.
 
 ## The safety model
 
@@ -89,6 +98,12 @@ escalated from autonomous Tier 1 to owner approval** (Tautulli-aware — the pro
 how many viewers it would interrupt); every report passes a redaction pass (secrets, LAN
 IPs, key-shaped strings) before being committed to this public repo; per-incident budget
 cap; Discord rate-limit (429) backoff.
+
+The one deliberate exception is **full tasks** (`@warden !full <task>`): a real Claude
+Code session with shell and file access, outside the tool registry entirely. It's
+disabled unless `ENABLE_FULL_TASKS=true`, reachable only by the owner, always queued as
+a Tier 2 action (one-tap approval per task, same audit trail as a delete), budget-capped,
+and its summary is redacted before posting.
 
 ## Evals
 

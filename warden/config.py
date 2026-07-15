@@ -71,6 +71,14 @@ class Config:
     discord_owner_id: str = ""
     discord_guild_id: str = ""   # register slash commands here (instant); global if unset (~1h)
 
+    # "@warden !full <task>" — a full Claude Code session on the host (shell +
+    # file access, outside the 18-tool sandbox). Requires explicit owner approval
+    # per task AND this flag: enabling means an approved Discord message can run
+    # arbitrary commands on the host. Off by default.
+    enable_full_tasks: bool = False
+    full_task_cwd: str = ""            # working dir for full sessions ("" = $HOME)
+    full_task_budget_usd: float = 2.0  # spend cap per full task
+
     def secrets(self) -> list[str]:
         """Every value that must never appear in a report or notification."""
         candidates = [
@@ -151,4 +159,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         discord_channel_id=e("DISCORD_CHANNEL_ID", ""),
         discord_owner_id=e("DISCORD_OWNER_ID", ""),
         discord_guild_id=e("DISCORD_GUILD_ID", ""),
+        enable_full_tasks=e("ENABLE_FULL_TASKS", "false").lower() in ("1", "true", "yes", "on"),
+        full_task_cwd=e("FULL_TASK_CWD", ""),
+        full_task_budget_usd=float(e("FULL_TASK_BUDGET_USD", "2.0")),
     )

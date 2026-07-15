@@ -184,6 +184,80 @@ def test_status_shows_typing_indicator(dconfig, store, channel, monkeypatch):
     assert typed  # 'warden is typing…' was triggered before the reply
 
 
+# --- @mentions: hand warden a task in plain language ---
+
+BOT = "bot-777"
+
+
+def test_mention_dispatches_a_task(dconfig, store, channel, monkeypatch):
+    import warden.notifier.discord_commands as cmds
+    called = {}
+
+    async def fake_task(instruction, config, backend, store, channel):
+        called["t"] = instruction
+
+    monkeypatch.setattr(cmds, "run_task", fake_task)
+    process_batch([_msg("9400", f"<@{BOT}> go fix the stuck sonarr queue")],
+                  dconfig, ReplayBackend({}), store, channel, bot_id=BOT)
+    assert called.get("t") == "go fix the stuck sonarr queue"
+    assert any("on it" in s for s in channel.sent)
+
+
+def test_mention_with_command_word_runs_that_command(dconfig, store, channel):
+    backend = ReplayBackend({"docker_ps": [], "disk_usage": [], "torrents": []})
+    process_batch([_msg("9401", f"<@!{BOT}> status")],
+                  dconfig, backend, store, channel, bot_id=BOT)
+    assert any("warden status" in s for s in channel.sent)
+
+
+def test_bare_mention_replies_with_status(dconfig, store, channel):
+    backend = ReplayBackend({"docker_ps": [], "disk_usage": [], "torrents": []})
+    process_batch([_msg("9402", f"<@{BOT}>")], dconfig, backend, store, channel, bot_id=BOT)
+    assert any("warden status" in s for s in channel.sent)
+
+
+def test_mention_yes_still_approves(dconfig, store, channel):
+    backend = ReplayBackend({})
+    aid = _queue_delete(store)
+    process_batch([_msg("9403", f"<@{BOT}> YES {aid}")],
+                  dconfig, backend, store, channel, bot_id=BOT)
+    assert store.get_action(aid)["status"] == "executed"
+
+
+def test_mention_from_non_owner_is_ignored(dconfig, store, channel):
+    process_batch([_msg("9404", f"<@{BOT}> wipe the disk", author=OTHER)],
+                  dconfig, ReplayBackend({}), store, channel, bot_id=BOT)
+    assert channel.sent == []
+
+
+def test_mention_full_task_needs_the_enable_flag(dconfig, store, channel):
+    # ENABLE_FULL_TASKS is off by default: the request is refused, nothing queued
+    process_batch([_msg("9405", f"<@{BOT}> !full apt upgrade everything")],
+                  dconfig, ReplayBackend({}), store, channel, bot_id=BOT)
+    assert store.pending_actions() == []
+    assert any("disabled" in s for s in channel.sent)
+
+
+def test_mention_full_task_queues_an_approval(dconfig, store, channel):
+    from warden.agent.coder import FULL_TASK_TOOL
+    dconfig.enable_full_tasks = True
+    process_batch([_msg("9406", f"<@{BOT}> !full apt upgrade everything")],
+                  dconfig, ReplayBackend({}), store, channel, bot_id=BOT)
+    (action,) = store.pending_actions()
+    assert action["tool"] == FULL_TASK_TOOL
+    assert any("needs approval" in s for s in channel.sent)
+
+
+def test_reply_without_mention_token_is_not_a_task(dconfig, store, channel):
+    # a Discord *reply* to a warden message lists the bot in mentions but the
+    # content carries no <@id> token — it must stay ordinary chatter
+    from warden.notifier.discord_poller import strip_mention
+    assert strip_mention("thanks warden", BOT) is None
+    process_batch([_msg("9407", "thanks warden")],
+                  dconfig, ReplayBackend({}), store, channel, bot_id=BOT)
+    assert channel.sent == []
+
+
 # --- send_approval seeds reactions ---
 
 def test_send_approval_posts_and_seeds_both_reactions(dconfig, monkeypatch):

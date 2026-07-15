@@ -147,29 +147,26 @@ async def handle_incident(incident_id: int, config: Config, backend: Backend,
     return run_result
 
 
-async def run_diagnose(question: str, config: Config, backend: Backend,
-                       store: Store, channel: Channel) -> dict[str, Any]:
-    """Owner-initiated, read-only investigation of a question (the `diagnose`
-    command). Runs the agent in dry-run — it investigates and answers but never
-    takes autonomous action — then posts its findings to the channel."""
+def _open_owner_incident(kind: str, text: str, config: Config, backend: Backend,
+                         store: Store, details: dict[str, Any]) -> int:
+    """Open an incident for an owner-initiated run (diagnose / task) and write
+    its trigger file, so handle_incident treats it like any other incident."""
     snapshot = collect_snapshot(backend, config)
-    key = f"diagnose:{datetime.now(timezone.utc).timestamp()}"
-    incident_id = store.open_incident(key, "query", question[:300])
+    key = f"{kind}:{datetime.now(timezone.utc).timestamp()}"
+    incident_id = store.open_incident(key, kind, text[:300])
     incident_file = config.state_dir / "incidents" / f"{incident_id}.json"
     incident_file.parent.mkdir(parents=True, exist_ok=True)
     incident_file.write_text(json.dumps({
-        "incident_id": incident_id, "key": key, "category": "query",
-        "summary": f"Owner question: {question}",
-        "details": {"owner_question": question},
+        "incident_id": incident_id, "key": key, "category": kind,
+        "summary": details.get("summary", text),
+        "details": details,
         "snapshot": snapshot,
     }, default=str))
+    return incident_id
 
-    # dry-run: answer + propose only, never auto-act. Internal notifications go to
-    # a LogChannel so the owner gets one clean answer, not warden's own chatter.
-    dry = dataclasses.replace(config, mode="dry-run")
-    result = await handle_incident(incident_id, dry, backend, store, LogChannel(config))
-    store.close_incident(incident_id, "resolved")  # a query shouldn't linger as an incident
 
+def _report_body(result: dict[str, Any]) -> str:
+    """The report's markdown sections, ready to post to the channel."""
     body = "(no findings)"
     path = result.get("report_path")
     if path and Path(path).exists():
@@ -178,9 +175,71 @@ async def run_diagnose(question: str, config: Config, backend: Backend,
         body = (md[idx:] if idx >= 0 else md).strip()
         # if the model answered in prose, the fallback wraps it — drop the wrapper
         body = body.replace("## Agent output (no structured report was written)\n\n", "")
+    return body
+
+
+def _cost_note(result: dict[str, Any], verb: str) -> str:
     cost = result.get("cost_usd")
-    cost_note = ""
-    if cost:
-        cost_note = f"\n\n_(diagnosed for {'<$0.01' if cost < 0.01 else f'${cost:.2f}'})_"
-    channel.send(f"🔍 **{question}**\n\n{body[:1700]}{cost_note}")
+    if not cost:
+        return ""
+    return f"\n\n_({verb} for {'<$0.01' if cost < 0.01 else f'${cost:.2f}'})_"
+
+
+async def run_diagnose(question: str, config: Config, backend: Backend,
+                       store: Store, channel: Channel) -> dict[str, Any]:
+    """Owner-initiated, read-only investigation of a question (the `diagnose`
+    command). Runs the agent in dry-run — it investigates and answers but never
+    takes autonomous action — then posts its findings to the channel."""
+    incident_id = _open_owner_incident("query", question, config, backend, store, {
+        "summary": f"Owner question: {question}",
+        "owner_question": question,
+    })
+
+    # dry-run: answer + propose only, never auto-act. Internal notifications go to
+    # a LogChannel so the owner gets one clean answer, not warden's own chatter.
+    dry = dataclasses.replace(config, mode="dry-run")
+    result = await handle_incident(incident_id, dry, backend, store, LogChannel(config))
+    store.close_incident(incident_id, "resolved")  # a query shouldn't linger as an incident
+
+    channel.send(f"🔍 **{question}**\n\n{_report_body(result)[:1700]}"
+                 f"{_cost_note(result, 'diagnosed')}")
+    return result
+
+
+class ApprovalRelay:
+    """Channel wrapper for owner tasks: warden's internal chatter goes to the
+    notifications log (the owner gets one clean answer at the end), but approval
+    prompts pass through to the real channel — a live task must still be able to
+    put Tier 2 Approve/Reject buttons in front of the owner."""
+
+    def __init__(self, config: Config, channel: Channel):
+        self._log = LogChannel(config)
+        self._real = channel
+
+    def send(self, text: str, components: list | None = None) -> None:
+        self._log.send(text, components)
+
+    def send_approval(self, action_id: int, text: str) -> str | None:
+        return self._real.send_approval(action_id, text)
+
+
+async def run_task(task: str, config: Config, backend: Backend,
+                   store: Store, channel: Channel) -> dict[str, Any]:
+    """Owner-initiated task over warden's own tools (the `task` command /
+    @mention). Unlike `diagnose`, this runs in the configured mode: Tier 1
+    fixes execute autonomously and Tier 2 actions queue for approval with
+    buttons, exactly as they do for a sentinel incident."""
+    incident_id = _open_owner_incident("task", task, config, backend, store, {
+        "summary": f"Owner task: {task}",
+        "owner_task": task,
+        "note": ("This is a direct request from the owner, not a sentinel anomaly. "
+                 "Carry out the task with your tools: investigate first, act where "
+                 "your tiers allow, and report exactly what you did."),
+    })
+
+    result = await handle_incident(incident_id, config, backend, store,
+                                   ApprovalRelay(config, channel))
+
+    channel.send(f"🛠️ **{task}**\n\n{_report_body(result)[:1700]}"
+                 f"{_cost_note(result, 'ran')}")
     return result

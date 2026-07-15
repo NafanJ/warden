@@ -40,6 +40,13 @@ def handle_reply(text: str, config: Config, backend: Backend,
     if not approved:
         return f"warden: action #{action_id} rejected. Nothing was changed."
 
+    # Full Claude Code sessions run in their own thread (minutes, not seconds)
+    # and post their result to the channel when done. Lazy import: this path
+    # pulls in the agent stack, which the plain webhook doesn't need.
+    from warden.agent.coder import FULL_TASK_TOOL, start_full_task
+    if action["tool"] == FULL_TASK_TOOL:
+        return start_full_task(action, config, store, channel)
+
     try:
         result = _execute(backend, action["tool"], json.loads(action["args_json"]))
         store.mark_executed(action_id, result)

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 
-from warden.agent.runner import run_diagnose
+from warden.agent.runner import run_diagnose, run_task
 from warden.backends import Backend
 from warden.config import Config
 from warden.notifier import Channel
@@ -35,6 +35,14 @@ COMMANDS: list[dict] = [
         ],
     },
     {
+        "name": "task",
+        "description": "Give warden a task; it acts with its tools — safe fixes run, destructive ones ask first.",
+        "options": [
+            {"name": "instruction", "description": "What to do, e.g. restart sonarr and check its logs come up clean",
+             "type": _STRING, "required": True},
+        ],
+    },
+    {
         "name": "user-stats",
         "description": "Plex watch stats from Tautulli, optionally focused on one user.",
         "options": [
@@ -45,9 +53,12 @@ COMMANDS: list[dict] = [
 ]
 
 # Names accepted on the typed message path (incl. legacy aliases) -> canonical.
+# task-full is mention/typed-only (no slash command): it's the rare, loud path.
 ALIASES = {
     "status": "status", "!status": "status",
     "diagnose": "diagnose", "!diagnose": "diagnose",
+    "task": "task", "!task": "task",
+    "task-full": "task-full", "!full": "task-full",
     "user-stats": "user-stats", "userstats": "user-stats", "!user-stats": "user-stats",
 }
 
@@ -92,6 +103,19 @@ def dispatch(name: str, arg: str, config: Config, backend: Backend,
             channel.send(f"🔍 investigating: _{arg}_ … (~30s)")
             asyncio.run(run_diagnose(arg, config, backend, store, channel))
             return None  # run_diagnose posts its findings to the channel itself
+        if name == "task":
+            if not arg:
+                return ("Usage: `/task instruction:<what to do>` — or just "
+                        "@mention warden with the task.")
+            channel.send(f"🛠️ on it: _{arg}_ …")
+            asyncio.run(run_task(arg, config, backend, store, channel))
+            return None  # run_task posts its outcome to the channel itself
+        if name == "task-full":
+            from warden.agent.coder import queue_full_task
+            if not arg:
+                return ("Usage: `@warden !full <task>` — runs a full Claude Code "
+                        "session on the host after you approve it.")
+            return queue_full_task(arg, config, store, channel)
     except Exception as exc:
         return f"warden: `{name}` failed — {exc}"
     return None
