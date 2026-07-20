@@ -58,7 +58,11 @@ def build_warden_server(backend: Backend, config: Config, store: Store,
         except Exception as exc:
             return _error(exc)
 
-    @tool("container_restart", "Restart a container (Tier 1, reversible).", {"name": str})
+    @tool("container_restart",
+          "Restart a container (Tier 1, reversible). Give a short `reason` for the "
+          "restart — if the container serves live Plex streams, the reason and who's "
+          "watching are shown to the owner in the approval request.",
+          {"name": str, "reason": str})
     async def container_restart(args):
         try:
             return _text(backend.container_restart(args["name"]))

@@ -88,15 +88,34 @@ def describe_action(tool_name: str, input_data: dict[str, Any]) -> str:
     return f"{name} {json.dumps(input_data)[:300]}"
 
 
-def _active_streams(config: Config, backend: Any) -> tuple[int, int] | None:
-    """(stream_count, transcode_count) from Tautulli, or None if unavailable."""
+def _active_streams(config: Config, backend: Any) -> dict[str, Any] | None:
+    """Tautulli activity — stream_count, transcode_count, and the per-session
+    'who is watching what' — or None if Tautulli isn't configured/reachable."""
     if not (backend and config.tautulli_api_key):
         return None
     try:
-        a = backend.tautulli_activity()
-        return int(a.get("stream_count", 0)), int(a.get("transcode_count", 0))
+        return backend.tautulli_activity()
     except Exception:
         return None
+
+
+def _describe_stream_restart(name: str, reason: str, activity: dict[str, Any]) -> str:
+    """Approval text for restarting a stream container: why it's needed and who it
+    interrupts, so the owner can judge the call without opening Tautulli."""
+    count = int(activity.get("stream_count", 0))
+    transcode = int(activity.get("transcode_count", 0))
+    head = (f"Restart {name} — ⚠️ will interrupt {count} active stream(s)"
+            + (f" ({transcode} transcoding)" if transcode else ""))
+    watchers = []
+    for s in activity.get("sessions", [])[:6]:
+        who = s.get("user") or "unknown"
+        what = s.get("title") or "something"
+        flags = ", ".join(f for f in (s.get("state"),
+                                      "transcoding" if s.get("transcode") else "") if f)
+        watchers.append(f"• {who} — {what}" + (f" [{flags}]" if flags else ""))
+    why = f"\nReason: {reason}" if reason else ""
+    who_block = ("\n" + "\n".join(watchers)) if watchers else ""
+    return f"{head}:{who_block}{why}" if who_block else f"{head}{why}"
 
 
 def _queue_for_approval(config: Config, store: Store, channel: Channel,
@@ -174,11 +193,10 @@ def decide_tool(config: Config, store: Store, channel: Channel,
     # silent autonomous action — escalate it to owner approval, with the impact.
     if tier == 1 and bare_name(tool_name) == "container_restart" \
             and input_data.get("name") in config.stream_containers:
-        streams = _active_streams(config, backend)
-        if streams and streams[0] > 0:
-            count, transcode = streams
-            desc = (f"Restart {input_data['name']} — ⚠️ will interrupt {count} active "
-                    f"stream(s)" + (f" ({transcode} transcoding)" if transcode else ""))
+        activity = _active_streams(config, backend)
+        if activity and int(activity.get("stream_count", 0)) > 0:
+            desc = _describe_stream_restart(
+                input_data["name"], input_data.get("reason", ""), activity)
             return _queue_for_approval(config, store, channel, incident_id,
                                        tool_name, input_data, desc, tier=1)
 

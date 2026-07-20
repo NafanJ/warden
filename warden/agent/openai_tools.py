@@ -44,8 +44,11 @@ TOOL_SCHEMAS: list[dict] = [
         "the latest start; read the 'note' field, and trust a 'Restarting (N)' in the "
         "incident snapshot over a now-healthy live read.",
         {"name": {"type": "string"}}, ["name"]),
-    _fn("container_restart", "Restart a container (Tier 1, reversible).",
-        {"name": {"type": "string"}}, ["name"]),
+    _fn("container_restart",
+        "Restart a container (Tier 1, reversible). Give a short `reason` for the "
+        "restart — if the container serves live Plex streams, the reason and who's "
+        "watching are shown to the owner in the approval request.",
+        {"name": {"type": "string"}, "reason": {"type": "string"}}, ["name", "reason"]),
     _fn("docker_prune", "Reclaim disk by removing dangling Docker images and build cache "
         "(Tier 1, safe — only unreferenced layers)."),
     _fn("disk_usage", "Disk usage for the monitored mount points."),

@@ -119,17 +119,26 @@ def test_docker_prune_is_tier1():
 class _StreamingBackend:
     def __init__(self, streams): self._streams = streams
     def tautulli_activity(self):
-        return {"stream_count": self._streams, "transcode_count": 1}
+        return {"stream_count": self._streams, "transcode_count": 1,
+                "sessions": [
+                    {"user": "Tom", "title": "Dune", "state": "playing", "transcode": True},
+                    {"user": "Jane", "title": "Andor S01E05", "state": "paused", "transcode": False},
+                ][:self._streams]}
 
 
 async def test_plex_restart_with_viewers_needs_approval(config, store, channel):
     config.tautulli_api_key = "set"
     handler = make_permission_handler(config, store, channel, 1, _StreamingBackend(2))
-    result = await handler("mcp__warden__container_restart", {"name": "plex"}, None)
+    result = await handler("mcp__warden__container_restart",
+                           {"name": "plex", "reason": "crash loop, exit 139"}, None)
     assert result.behavior == "deny"  # escalated to approval, not autonomous
-    action = store.find_pending_action("container_restart", {"name": "plex"})
+    action = store.find_pending_action("container_restart",
+                                       {"name": "plex", "reason": "crash loop, exit 139"})
     assert action is not None
-    assert "interrupt 2 active stream" in channel.sent[0]
+    msg = channel.sent[0]
+    assert "interrupt 2 active stream" in msg
+    assert "Tom — Dune" in msg and "Jane — Andor S01E05" in msg  # who's watching
+    assert "Reason: crash loop, exit 139" in msg                  # why it needs restarting
 
 
 async def test_plex_restart_no_viewers_is_autonomous(config, store, channel):
