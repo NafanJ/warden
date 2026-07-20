@@ -33,6 +33,19 @@ class Config:
     tautulli_url: str = "http://localhost:8181"
     tautulli_api_key: str = ""
 
+    # Plex API — the primary source for `user-stats`. Libraries are shared by
+    # invite, and Tautulli only knows users it has watched stream, so invitees
+    # are missing or stale there. Plex knows the whole roster and holds the
+    # server-side history. Token: open any library item → Get Info → View XML,
+    # and copy the X-Plex-Token query param off the URL.
+    plex_url: str = "http://localhost:32400"
+    plex_token: str = ""
+    # The same person can carry different names in each source (a Plex login vs
+    # a Tautulli friendly name) or hold two Plex accounts after a re-invite.
+    # Nothing in the data joins them, so map the variants onto one display name:
+    # "plexlogin=Display, oldname=Display".
+    plex_user_aliases: dict[str, str] = field(default_factory=dict)
+
     # Plex webhook → throttle Transmission while anyone is streaming.
     plex_throttle_downloads: bool = True
     plex_webhook_token: str = ""  # optional shared secret in the webhook URL (?token=)
@@ -100,6 +113,18 @@ def _csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+def _kv_aliases(value: str) -> dict[str, str]:
+    """Parse 'plexname=Display, other=Display' into {lowercased alias: display}."""
+    out: dict[str, str] = {}
+    for pair in _csv(value):
+        if "=" not in pair:
+            continue
+        alias, display = pair.split("=", 1)
+        if alias.strip() and display.strip():
+            out[alias.strip().lower()] = display.strip()
+    return out
+
+
 def deletable(path: str, roots: list[str]) -> bool:
     """True only if `path` is strictly inside one of the allowed root trees — a
     descendant, never a root directory itself. So warden can clean files within
@@ -137,6 +162,9 @@ def load_config(env_file: str | Path | None = None) -> Config:
         transmission_pass=e("TRANSMISSION_PASS", ""),
         tautulli_url=e("TAUTULLI_URL", "http://localhost:8181"),
         tautulli_api_key=e("TAUTULLI_API_KEY", ""),
+        plex_url=e("PLEX_URL", "http://localhost:32400"),
+        plex_token=e("PLEX_TOKEN", ""),
+        plex_user_aliases=_kv_aliases(e("PLEX_USER_ALIASES", "")),
         plex_throttle_downloads=e("PLEX_THROTTLE_DOWNLOADS", "true").lower() in ("1", "true", "yes", "on"),
         plex_webhook_token=e("PLEX_WEBHOOK_TOKEN", ""),
         stream_containers=_csv(e("STREAM_CONTAINERS", "plex")),

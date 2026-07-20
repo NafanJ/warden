@@ -175,4 +175,4 @@ Also on the list:
 
 Python · OpenAI (`gpt-4o-mini`) or [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
 (`claude-sonnet-4-6`) · FastAPI · SQLite · Discord bot / WhatsApp Cloud API ·
-Tautulli (Plex) · systemd · Cloudflare Tunnel
+Plex API + Tautulli · systemd · Cloudflare Tunnel

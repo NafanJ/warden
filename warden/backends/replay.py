@@ -95,6 +95,16 @@ class ReplayBackend:
     def tautulli_user_stats(self, user_id: int) -> list[dict[str, Any]]:
         return self.snapshot.get("tautulli_user_stats", {}).get(str(user_id), [])
 
+    # --- plex ---
+    def plex_users(self) -> list[dict[str, Any]]:
+        return self.snapshot.get("plex_users", [])
+
+    def plex_history(self, account_id: int | None = None) -> list[dict[str, Any]]:
+        rows = self.snapshot.get("plex_history", [])
+        if account_id is None:
+            return rows
+        return [r for r in rows if r.get("account_id") == account_id]
+
     # --- network ---
     def check_urls(self, urls: list[str]) -> list[dict[str, Any]]:
         return self.snapshot.get("url_checks", [{"url": u, "ok": True, "status": 200} for u in urls])

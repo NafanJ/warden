@@ -334,6 +334,101 @@ class LiveBackend:
         return [{"days": r.get("query_days"), "plays": r.get("total_plays") or 0,
                  "seconds": r.get("total_time") or 0} for r in rows]
 
+    # --- plex (primary source for user stats) ---
+    def _plex_get(self, path: str, base: str | None = None, **params: Any) -> Any:
+        resp = httpx.get(f"{base or self.config.plex_url}{path}",
+                         params={"X-Plex-Token": self.config.plex_token, **params},
+                         headers={"Accept": "application/json"}, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+
+    def plex_users(self) -> list[dict[str, Any]]:
+        """Everyone with access to the server.
+
+        Two sources because neither is complete: /accounts lists people who have
+        actually played something (and carries the accountID history is keyed by),
+        while a freshly-invited friend exists only on plex.tv until their first play.
+        """
+        users: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        container = self._plex_get("/accounts").get("MediaContainer", {})
+        for a in container.get("Account", []):
+            name = (a.get("name") or "").strip()
+            aid = a.get("id")
+            # id 0 is the synthetic "all users" row Plex prepends to the list
+            if not name or aid in (None, 0, "0"):
+                continue
+            users.append({"account_id": int(aid), "name": name})
+            seen.add(name.lower())
+        try:
+            friends = self._plex_get("/api/v2/friends", base="https://plex.tv")
+        except Exception:
+            # plex.tv unreachable — /accounts still covers everyone who has watched,
+            # which is everyone with stats to report.
+            friends = []
+        for f in friends or []:
+            name = (f.get("title") or f.get("username") or "").strip()
+            if name and name.lower() not in seen:
+                users.append({"account_id": int(f.get("id") or 0), "name": name})
+                seen.add(name.lower())
+        return users
+
+    def _plex_durations(self, rating_keys: list[str]) -> dict[str, int]:
+        """Item runtimes in seconds, keyed by ratingKey.
+
+        History rows carry no duration of their own, so runtimes have to be
+        joined on from the library. /library/metadata takes comma-separated
+        keys, which turns hundreds of lookups into a handful of requests;
+        keys that no longer exist are omitted from the response rather than
+        failing it, so a deleted item costs only its own runtime.
+        """
+        out: dict[str, int] = {}
+        keys = [k for k in rating_keys if k]
+        for i in range(0, len(keys), 100):
+            chunk = ",".join(keys[i:i + 100])
+            try:
+                container = self._plex_get(f"/library/metadata/{chunk}").get("MediaContainer", {})
+            except Exception:
+                continue
+            for m in container.get("Metadata", []):
+                out[str(m.get("ratingKey"))] = int(m.get("duration") or 0) // 1000
+        return out
+
+    def plex_history(self, account_id: int | None = None) -> list[dict[str, Any]]:
+        """Server-side watch history — one row per play, all users included.
+
+        This is what Tautulli can't give us for invitees it never saw stream.
+        A row means Plex scrobbled the item as watched, so `seconds` is the
+        item's runtime, not measured viewing time: unlike Tautulli it doesn't
+        account for partial plays, pauses or re-watches of part of an episode.
+        """
+        params: dict[str, Any] = {"sort": "viewedAt:desc"}
+        if account_id is not None:
+            params["accountID"] = account_id
+        rows: list[dict[str, Any]] = []
+        start, page, cap = 0, 500, 20_000
+        while start < cap:
+            container = self._plex_get(
+                "/status/sessions/history/all", **params,
+                **{"X-Plex-Container-Start": start, "X-Plex-Container-Size": page},
+            ).get("MediaContainer", {})
+            batch = container.get("Metadata", [])
+            for m in batch:
+                rows.append({
+                    "account_id": int(m.get("accountID") or 0),
+                    "viewed_at": int(m.get("viewedAt") or 0),
+                    "rating_key": str(m.get("ratingKey") or ""),
+                    "seconds": 0,
+                    "title": m.get("grandparentTitle") or m.get("title"),
+                })
+            start += page
+            if not batch or len(batch) < page or start >= int(container.get("totalSize") or 0):
+                break
+        durations = self._plex_durations(sorted({r["rating_key"] for r in rows}))
+        for r in rows:
+            r["seconds"] = durations.get(r["rating_key"], 0)
+        return rows
+
     # --- network ---
     def check_urls(self, urls: list[str]) -> list[dict[str, Any]]:
         results = []
