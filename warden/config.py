@@ -59,6 +59,12 @@ class Config:
     # unresolved (escalated) — prevents re-investigating a persistent condition
     # (e.g. a full disk warden can't fix) every cycle.
     incident_cooldown_hours: float = 6.0
+    # Per-incident-key overrides of the cooldown above, for known self-healing
+    # conditions that recur on a fixed schedule (e.g. immich's nightly SIGSEGV
+    # crash loop). A window wider than the recurrence interval turns nightly
+    # re-paging into a periodic reminder. Keyed by anomaly key, e.g.
+    # "container_down:immich-server".
+    incident_cooldown_overrides: dict[str, float] = field(default_factory=dict)
     public_urls: list[str] = field(default_factory=list)
     stall_threshold_hours: float = 4.0
     stall_min_age_hours: float = 1.0
@@ -125,6 +131,21 @@ def _kv_aliases(value: str) -> dict[str, str]:
     return out
 
 
+def _kv_hours(value: str) -> dict[str, float]:
+    """Parse 'key=hours, key2=hours2' into {key: hours}. Anomaly keys contain a
+    ':' (e.g. 'container_down:immich-server'), so split on the *last* '='."""
+    out: dict[str, float] = {}
+    for pair in _csv(value):
+        if "=" not in pair:
+            continue
+        k, h = pair.rsplit("=", 1)
+        try:
+            out[k.strip()] = float(h)
+        except ValueError:
+            continue
+    return out
+
+
 def deletable(path: str, roots: list[str]) -> bool:
     """True only if `path` is strictly inside one of the allowed root trees — a
     descendant, never a root directory itself. So warden can clean files within
@@ -171,6 +192,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
         disk_paths=_csv(e("DISK_PATHS", "/,/mnt/Modi")),
         disk_threshold_pct=int(e("DISK_THRESHOLD_PCT", "92")),
         incident_cooldown_hours=float(e("INCIDENT_COOLDOWN_HOURS", "6")),
+        incident_cooldown_overrides=_kv_hours(e("INCIDENT_COOLDOWN_OVERRIDES", "")),
         public_urls=_csv(e("PUBLIC_URLS", "")),
         stall_threshold_hours=float(e("STALL_THRESHOLD_HOURS", "4")),
         stall_min_age_hours=float(e("STALL_MIN_AGE_HOURS", "1")),
