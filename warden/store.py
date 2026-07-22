@@ -125,6 +125,28 @@ class Store:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def open_incidents(self) -> list[dict[str, Any]]:
+        """Every incident still open or escalated — including older ones sharing a
+        key with a newer incident, which `unresolved_incidents` collapses away.
+        Clearing works off this so nothing is left behind unreachable."""
+        rows = self.conn.execute(
+            "SELECT * FROM incidents WHERE status IN ('open', 'escalated') ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def clear_incident(self, incident_id: int) -> dict[str, Any] | None:
+        """Close an open/escalated incident by hand. Returns the row it closed, or
+        None if that id doesn't exist or was already closed — so the caller can
+        tell the owner which of the two happened."""
+        row = self.conn.execute(
+            "SELECT * FROM incidents WHERE id=? AND status IN ('open', 'escalated')",
+            (incident_id,),
+        ).fetchone()
+        if not row:
+            return None
+        self.close_incident(incident_id, "resolved")
+        return dict(row)
+
     def get_incident(self, incident_id: int) -> dict[str, Any] | None:
         row = self.conn.execute("SELECT * FROM incidents WHERE id=?", (incident_id,)).fetchone()
         return dict(row) if row else None

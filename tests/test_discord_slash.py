@@ -38,7 +38,7 @@ def _interaction(name, options=None, author=OWNER):
 
 def test_commands_schema_matches_picker_expectations():
     by_name = {c["name"]: c for c in COMMANDS}
-    assert set(by_name) == {"status", "diagnose", "task", "user-stats"}
+    assert set(by_name) == {"status", "diagnose", "task", "user-stats", "clear"}
     assert "options" not in by_name["status"]                 # no params
     q = by_name["diagnose"]["options"][0]
     assert q["name"] == "question" and q["required"] is True  # required param

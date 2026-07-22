@@ -43,6 +43,14 @@ COMMANDS: list[dict] = [
         ],
     },
     {
+        "name": "clear",
+        "description": "Clear incidents so warden stops flagging them. No argument lists what's open.",
+        "options": [
+            {"name": "incident", "description": "Incident id(s), e.g. 12 or 12 14 — or 'all'",
+             "type": _STRING, "required": False},
+        ],
+    },
+    {
         "name": "user-stats",
         "description": "Plex watch stats from Tautulli, optionally focused on one user.",
         "options": [
@@ -59,6 +67,7 @@ ALIASES = {
     "diagnose": "diagnose", "!diagnose": "diagnose",
     "task": "task", "!task": "task",
     "task-full": "task-full", "!full": "task-full",
+    "clear": "clear", "!clear": "clear",
     "user-stats": "user-stats", "userstats": "user-stats", "!user-stats": "user-stats",
 }
 
@@ -84,6 +93,55 @@ def parse_interaction(interaction: dict) -> tuple[str, str, str] | None:
     return name, arg, str(user.get("id", ""))
 
 
+def handle_clear(arg: str, store: Store) -> str:
+    """`/clear` — close incidents by hand so warden stops flagging them.
+
+    Bare `/clear` lists what's open (with ids) rather than guessing; `all` closes
+    everything open; otherwise the arg is one or more incident ids. Clearing is
+    the same 'resolved' close the Dismiss button does, so a genuine recurrence
+    still re-raises later — this only silences what's on the board now."""
+    arg = arg.strip().lstrip("#")
+    open_rows = store.open_incidents()
+    if not arg:
+        if not open_rows:
+            return "Nothing open to clear — all clear ✅"
+        lines = [f"**Open incidents ({len(open_rows)}):**"]
+        lines += [f"  • #{r['id']} {r['summary']}" for r in open_rows[:10]]
+        if len(open_rows) > 10:
+            lines.append(f"  … and {len(open_rows) - 10} more")
+        lines.append("Clear one with `/clear incident:<id>`, or everything with `/clear incident:all`.")
+        return "\n".join(lines)
+
+    if arg.lower() == "all":
+        if not open_rows:
+            return "Nothing open to clear — all clear ✅"
+        for row in open_rows:
+            store.clear_incident(row["id"])
+        return (f"🗙 Cleared {len(open_rows)} incident(s): "
+                + ", ".join(f"#{r['id']}" for r in open_rows))
+
+    ids, bad = [], []
+    for token in arg.replace(",", " ").split():
+        token = token.lstrip("#")
+        (ids if token.isdigit() else bad).append(token)
+    if bad or not ids:
+        return ("Usage: `/clear incident:<id>` (or several ids, or `all`). "
+                "Run `/clear` with no argument to see what's open.")
+
+    cleared, missed = [], []
+    for incident_id in ids:
+        row = store.clear_incident(int(incident_id))
+        (cleared if row else missed).append(int(incident_id))
+    parts = []
+    if cleared:
+        parts.append("🗙 Cleared " + ", ".join(f"#{i}" for i in cleared)
+                     + " — warden won't flag them again.")
+    if missed:
+        parts.append("Not open (unknown or already closed): "
+                     + ", ".join(f"#{i}" for i in missed))
+    return "\n".join(parts)
+
+
 def dispatch(name: str, arg: str, config: Config, backend: Backend,
              store: Store, channel: Channel) -> str | None:
     """Run a warden command. Returns text to show the owner, or None when the
@@ -96,6 +154,8 @@ def dispatch(name: str, arg: str, config: Config, backend: Backend,
             return format_status(gather(config, backend, store))
         if name == "user-stats":
             return handle_userstats(arg, backend)
+        if name == "clear":
+            return handle_clear(arg, store)
         if name == "diagnose":
             if not arg:
                 return ("Usage: `/diagnose question:<what to look into>` — "
