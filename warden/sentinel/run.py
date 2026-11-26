@@ -16,7 +16,7 @@ from warden.notifier import get_channel
 from warden.notifier.logchannel import LogChannel
 from warden.sentinel.collectors import collect_snapshot
 from warden.sentinel.reaper import reap_completed_torrents
-from warden.sentinel.rules import evaluate
+from warden.sentinel.rules import evaluate, watched
 from warden.store import Store
 
 
@@ -45,7 +45,7 @@ def main() -> int:
 
     heartbeat = config.state_dir / "heartbeat.log"
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    containers = snapshot.get("docker_ps") or []
+    containers = watched(snapshot.get("docker_ps") or [], config)
     up = sum(1 for c in containers if (c.get("state") or "").lower() == "running")
 
     if not anomalies:

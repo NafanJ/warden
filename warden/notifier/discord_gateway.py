@@ -22,6 +22,7 @@ from warden.notifier import discord as dc
 from warden.notifier.components import handle_component
 from warden.notifier.discord_commands import dispatch, parse_interaction
 from warden.store import Store
+from warden.notifier.discord_member_commands import MEMBER_COMMANDS, member_allowed, member_reply
 
 GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
 # Interactions are delivered regardless of gateway intents, so we identify with
@@ -63,13 +64,29 @@ async def _handle_command(interaction: dict, config: Config, backend: Backend,
 
     # ACK within Discord's 3s window before doing any real work.
     try:
-        dc.interaction_defer(interaction_id, token)
+        dc.interaction_defer(interaction_id, token, ephemeral=True)
     except Exception as exc:
         print(f"gateway: defer failed for /{name}: {exc}")
         return
 
-    if config.discord_owner_id and author_id != config.discord_owner_id:
+    if name in MEMBER_COMMANDS:
+        if not member_allowed(interaction, config):
+            dc.interaction_respond(config, token, "Ask Nathan for the Plex Member role to use these commands in this server.")
+            return
+        try:
+            reply = await asyncio.to_thread(member_reply, name, config)
+        except Exception:
+            reply = "I couldn't check that right now. Please try again or ask in #help."
+        dc.interaction_respond(config, token, reply)
+        return
+
+    if not config.discord_owner_id or author_id != config.discord_owner_id:
         dc.interaction_respond(config, token, "⛔ warden only takes commands from its owner.")
+        return
+
+    if (not config.discord_guild_id or interaction.get("guild_id") != config.discord_guild_id
+            or interaction.get("channel_id") != config.discord_channel_id):
+        dc.interaction_respond(config, token, "Use admin commands in the private #warden channel.")
         return
 
     # dispatch is sync and can block ~30s (diagnose); run it off the event loop
@@ -90,7 +107,7 @@ async def _handle_component(interaction: dict, config: Config, backend: Backend,
 
     # Owner check first (it's instant), so a stranger gets a private rejection
     # rather than us deferring and wiping the owner's alert message.
-    if config.discord_owner_id and _author_id(interaction) != config.discord_owner_id:
+    if not config.discord_owner_id or _author_id(interaction) != config.discord_owner_id:
         try:
             dc.interaction_reply_ephemeral(interaction_id, token,
                                            "⛔ These buttons are the owner's.")

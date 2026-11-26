@@ -23,12 +23,14 @@ def dconfig(config):
     config.discord_bot_token = "bot-token-abc"
     config.discord_channel_id = "chan-42"
     config.discord_owner_id = OWNER
+    config.discord_guild_id = "guild-7"
     return config
 
 
 def _interaction(name, options=None, author=OWNER):
     return {
         "id": "int-1", "token": "tok-xyz", "type": 2,
+        "guild_id": "guild-7", "channel_id": "chan-42",
         "data": {"name": name, "options": options or []},
         "member": {"user": {"id": author}},
     }
@@ -38,7 +40,7 @@ def _interaction(name, options=None, author=OWNER):
 
 def test_commands_schema_matches_picker_expectations():
     by_name = {c["name"]: c for c in COMMANDS}
-    assert set(by_name) == {"status", "diagnose", "task", "user-stats", "clear"}
+    assert set(by_name) == {"status", "request", "help", "admin-status", "diagnose", "task", "user-stats", "clear"}
     assert "options" not in by_name["status"]                 # no params
     q = by_name["diagnose"]["options"][0]
     assert q["name"] == "question" and q["required"] is True  # required param
@@ -86,7 +88,7 @@ def _stub_responses(monkeypatch):
     """Capture defer + final-edit instead of hitting Discord."""
     captured = {"deferred": False, "reply": None}
     monkeypatch.setattr(dc, "interaction_defer",
-                        lambda iid, tok: captured.update(deferred=True))
+                        lambda iid, tok, **kw: captured.update(deferred=True, ephemeral=kw.get("ephemeral")))
     monkeypatch.setattr(dc, "interaction_respond",
                         lambda config, tok, text: captured.update(reply=text))
     return captured
@@ -96,7 +98,7 @@ def test_gateway_status_defers_then_answers(dconfig, store, channel, monkeypatch
     captured = _stub_responses(monkeypatch)
     backend = ReplayBackend({"docker_ps": [{"name": "plex", "state": "running", "status": "Up"}],
                              "disk_usage": [], "torrents": []})
-    asyncio.run(gw._handle_command(_interaction("status"), dconfig, backend, store, channel))
+    asyncio.run(gw._handle_command(_interaction("admin-status"), dconfig, backend, store, channel))
     assert captured["deferred"] is True                 # ACKed within the 3s window
     assert "warden status" in captured["reply"]         # then the real health digest
 
@@ -104,7 +106,7 @@ def test_gateway_status_defers_then_answers(dconfig, store, channel, monkeypatch
 def test_gateway_rejects_non_owner(dconfig, store, channel, monkeypatch):
     captured = _stub_responses(monkeypatch)
     backend = ReplayBackend({"docker_ps": [], "disk_usage": [], "torrents": []})
-    asyncio.run(gw._handle_command(_interaction("status", author=OTHER),
+    asyncio.run(gw._handle_command(_interaction("admin-status", author=OTHER),
                                        dconfig, backend, store, channel))
     assert captured["deferred"] is True
     assert "owner" in captured["reply"].lower()

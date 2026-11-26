@@ -23,7 +23,7 @@ _STRING = 3
 
 COMMANDS: list[dict] = [
     {
-        "name": "status",
+        "name": "admin-status",
         "description": "Live health: containers, disk, downloads, Plex, and what's flagged right now.",
     },
     {
@@ -60,9 +60,20 @@ COMMANDS: list[dict] = [
     },
 ]
 
+# Discord hides operational commands from ordinary members; runtime checks remain authoritative.
+for command in COMMANDS:
+    command["default_member_permissions"] = "0"
+    command["dm_permission"] = False
+COMMANDS += [
+    {"name": "request", "description": "Request a film or show through Overseerr.", "dm_permission": False},
+    {"name": "status", "description": "Check whether Plex and the request service are responding.", "dm_permission": False},
+    {"name": "help", "description": "How to watch, request media, and get help.", "dm_permission": False},
+]
+
 # Names accepted on the typed message path (incl. legacy aliases) -> canonical.
 # task-full is mention/typed-only (no slash command): it's the rare, loud path.
 ALIASES = {
+    "admin-status": "status",
     "status": "status", "!status": "status",
     "diagnose": "diagnose", "!diagnose": "diagnose",
     "task": "task", "!task": "task",

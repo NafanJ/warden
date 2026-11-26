@@ -33,6 +33,16 @@ def handle_reply(text: str, config: Config, backend: Backend,
 
     approved = match.group(1).lower() in ("yes", "approve")
     action_id = int(match.group(2))
+    if config.engine == "langgraph":
+        from warden.local.db import Database
+        db = Database(config.state_dir.resolve() / "warden.db")
+        db.initialize()
+        local_action = db.one("SELECT * FROM actions WHERE id=?", (action_id,))
+        if local_action and local_action.get("run_id"):
+            result = db.decide(action_id, approved)
+            return f"Warden: action #{action_id} {result['status']}. The investigation will resume."
+        if local_action and local_action["tool"] == "claude_code_task":
+            return "Warden: cloud full tasks are disabled in local-only mode."
     action = store.decide_action(action_id, approved)
     if not action:
         return f"warden: action #{action_id} not found or no longer pending (expired/decided)."

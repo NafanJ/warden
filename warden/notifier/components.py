@@ -80,6 +80,11 @@ def handle_component(custom_id: str, config: Config, backend: Backend,
 
 def _restart(name: str, config: Config, backend: Backend, store: Store,
              channel: Channel) -> str:
+    if config.engine == "langgraph":
+        from warden.local.service import submit_external
+        submit_external(config, f"Restart {name}", forced={"name": "container_restart",
+                         "args": {"name": name, "reason": "Owner requested restart from Discord"}})
+        return f"Warden: restart of {name} queued for approval."
     # Route through the same tier gate as the agent, so it's audited and shows in
     # the daily summary's auto-fix list (and is denied in dry-run mode).
     from warden.agent.tiers import decide_tool

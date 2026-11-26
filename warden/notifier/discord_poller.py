@@ -48,7 +48,7 @@ def process_batch(messages: list[dict], config: Config, backend: Backend,
     for msg in sorted(messages, key=lambda m: int(m["id"])):
         highest = str(msg["id"])
         author_id = str(msg.get("author", {}).get("id", ""))
-        if config.discord_owner_id and author_id != config.discord_owner_id:
+        if not config.discord_owner_id or author_id != config.discord_owner_id:
             continue  # only the owner may approve / query
         content = (msg.get("content") or "").strip()
         mentioned = strip_mention(content, bot_id) if bot_id else None

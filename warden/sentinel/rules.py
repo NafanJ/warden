@@ -27,6 +27,16 @@ def _completed_job(c: dict[str, Any]) -> bool:
     return bool(m) and int(m.group(1)) == 0
 
 
+def watched(containers: list[dict[str, Any]], config: Config) -> list[dict[str, Any]]:
+    """The containers warden actually watches: everything except explicitly
+    ignored names and finished one-shot jobs. This is the population every
+    up/total count and down-check should be computed over, so a compose
+    migration that exits 0 by design never reads as "22/23 up"."""
+    return [c for c in containers
+            if (c.get("name") or "") not in config.ignored_containers
+            and not _completed_job(c)]
+
+
 @dataclass
 class Anomaly:
     key: str          # stable dedup key, e.g. "container_down:plex"
@@ -48,12 +58,8 @@ def evaluate(snapshot: dict[str, Any], config: Config) -> list[Anomaly]:
 
 def _containers(snapshot: dict[str, Any], config: Config) -> list[Anomaly]:
     out = []
-    for c in snapshot.get("docker_ps") or []:
+    for c in watched(snapshot.get("docker_ps") or [], config):
         name = c.get("name") or ""
-        if name in config.ignored_containers:
-            continue
-        if _completed_job(c):
-            continue  # a finished one-shot job, not a downed service
         state = (c.get("state") or "").lower()
         status = c.get("status") or ""
         unhealthy = "unhealthy" in status.lower()

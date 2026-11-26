@@ -1,6 +1,13 @@
 """The torrent reaper: completed downloads get removed from Transmission
 (data kept), but never one an *arr is still importing, and never in dry-run.
 """
+import pytest
+from warden.media_guard import protection
+
+@pytest.fixture(autouse=True)
+def isolate_live_guard(monkeypatch, tmp_path):
+    monkeypatch.setattr(protection, 'ENABLED', tmp_path / 'guard-disabled')
+
 from warden.backends.replay import ReplayBackend
 from warden.sentinel.reaper import reap_completed_torrents
 

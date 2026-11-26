@@ -80,7 +80,8 @@ async def plex(request: Request):
         payload = json.loads(raw)
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="bad payload")
-    return handle_plex_event(payload, config, backend)
+    current = load_config() if config.engine == "langgraph" else config
+    return handle_plex_event(payload, current, backend)
 
 
 @app.get("/healthz")

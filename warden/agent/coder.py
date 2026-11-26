@@ -49,6 +49,8 @@ def queue_full_task(task: str, config: Config, store: Store,
                     channel: Channel) -> str | None:
     """Queue a full-access task for owner approval. Returns a message for the
     owner, or None when the approval prompt itself is the visible feedback."""
+    if config.engine == "langgraph":
+        return "Warden: cloud full tasks are disabled in local-only mode."
     if not config.enable_full_tasks:
         return ("⛔ Full tasks are disabled. Set ENABLE_FULL_TASKS=true in .env first — "
                 "be aware this lets an approved Discord message run shell commands "
@@ -75,6 +77,8 @@ def start_full_task(action: dict[str, Any], config: Config, store: Store,
                     channel: Channel) -> str:
     """Kick off an approved full task in a background thread (a session can run
     for minutes; the poller must keep polling). Returns the immediate reply."""
+    if config.engine == "langgraph":
+        return "Warden: cloud full tasks are disabled in local-only mode."
     task = json.loads(action["args_json"])["task"]
     threading.Thread(target=_run_and_post,
                      args=(int(action["id"]), task, config, store, channel),

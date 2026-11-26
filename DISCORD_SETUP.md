@@ -133,3 +133,18 @@ off if in doubt.
 | `/diagnose` shows "application did not respond" | Gateway not connected — check the log for a gateway error, and that `websockets` is installed in the venv. Typed `diagnose <question>` still works as a fallback. |
 | `Discord channel requires DISCORD_BOT_TOKEN…` on startup | `NOTIFY_CHANNEL=discord` but token or channel id is blank. |
 | `401 Unauthorized` in the poller log | Bad/rotated `DISCORD_BOT_TOKEN`. |
+
+## Plex community commands
+
+Members with `DISCORD_MEMBER_ROLE_ID` in `DISCORD_GUILD_ID` can use `/request`,
+`/help`, and `/status`. The request link is set by `DISCORD_REQUESTS_URL`.
+Replies are ephemeral. Status checks only Plex's identity endpoint and local
+Overseerr availability, caches results for 20 seconds, and exposes no host,
+queue, account, or viewing details. It does not verify remote playback.
+
+The detailed owner slash command is now `/admin-status`; typed `status` in
+Warden's private channel still works. Operational slash commands default to
+administrator-only visibility and additionally require the configured owner,
+guild, and Warden channel at runtime. Missing owner configuration denies admin
+commands, messages, and approval buttons. Member commands cannot invoke the
+agent or host tools. Discord role assignment remains manual.

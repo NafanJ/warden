@@ -52,16 +52,24 @@ class DiscordChannel:
             raise ValueError("Discord channel requires DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID")
         self.config = config
 
-    def _post_message(self, text: str, components: list | None = None) -> dict:
+    def _post_message(self, text: str, components: list | None = None,
+                      embeds: list[dict] | None = None) -> dict:
         body: dict = {"content": text[:2000]}  # Discord caps message bodies at 2000 chars
         if components:
             body["components"] = components
+        if embeds:
+            body["embeds"] = embeds
         resp = _request("POST", self.config.discord_bot_token,
                         f"{API}/channels/{self.config.discord_channel_id}/messages", json=body)
         return resp.json()
 
     def send(self, text: str, components: list | None = None) -> str:
         return str(self._post_message(text, components)["id"])
+
+    def send_embed(self, embed: dict, text: str = "") -> str:
+        """Post a rich embed (the daily digest). Channels without this method
+        get the plain-text rendering — callers feature-detect with hasattr."""
+        return str(self._post_message(text, embeds=[embed])["id"])
 
     def send_approval(self, action_id: int, text: str) -> str | None:
         """Post an approval prompt with Approve/Reject buttons (and ✅/❌ reactions
@@ -150,14 +158,17 @@ def register_commands(config: Config, commands: list[dict]) -> str:
 
 
 def interaction_defer(interaction_id: str, token: str,
-                      deferred_type: int = DEFERRED_RESPONSE) -> None:
+                      deferred_type: int = DEFERRED_RESPONSE, *, ephemeral: bool = False) -> None:
     """ACK an interaction within Discord's 3s window so slow work (diagnose, a
     restart) doesn't show 'application did not respond'. Use DEFERRED_RESPONSE for
     slash commands (posts a new reply) and DEFERRED_UPDATE for button clicks
     (edits the button's own message). The callback endpoint is authenticated by
     the interaction token in the URL, not the bot token."""
+    payload = {"type": deferred_type}
+    if ephemeral and deferred_type == DEFERRED_RESPONSE:
+        payload["data"] = {"flags": 64}
     httpx.post(f"{API}/interactions/{interaction_id}/{token}/callback",
-               json={"type": deferred_type}, timeout=30).raise_for_status()
+               json=payload, timeout=30).raise_for_status()
 
 
 def interaction_reply_ephemeral(interaction_id: str, token: str, text: str) -> None:

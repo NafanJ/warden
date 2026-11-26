@@ -24,6 +24,7 @@ from warden.agent.tiers import decide_tool
 from warden.config import Config
 from warden.notifier import Channel
 from warden.store import Store
+from warden.media_guard.protection import guarded_cleanup
 
 
 def _arr_managed(backend: Any) -> tuple[set[str], set[str]] | None:
@@ -44,6 +45,7 @@ def _arr_managed(backend: Any) -> tuple[set[str], set[str]] | None:
     return tracked, categories
 
 
+@guarded_cleanup
 def reap_completed_torrents(config: Config, backend: Any, store: Store,
                             channel: Channel) -> list[str]:
     """Remove finished, unmanaged torrents from Transmission (data kept). Returns
@@ -62,8 +64,14 @@ def reap_completed_torrents(config: Config, backend: Any, store: Store,
         return []  # an *arr is unreachable — don't risk reaping a managed download
     tracked, categories = managed
 
+    from warden.media_guard.protection import protected_hashes
+    protected = protected_hashes()
+    if protected is None:
+        return []
     removed: list[str] = []
     for t in torrents:
+        if (t.get("hashString") or "").upper() in protected or (t.get("downloadDir") or "").startswith("/quarantine"):
+            continue
         if (t.get("percentDone") or 0) < 1.0:
             continue
         if (t.get("hashString") or "").upper() in tracked:

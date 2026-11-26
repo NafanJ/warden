@@ -82,6 +82,8 @@ class LiveBackend:
     # --- docker ---
     def docker_ps(self) -> list[dict[str, Any]]:
         raw = _run(["docker", "ps", "-a", "--format", "{{json .}}"])
+        if raw.startswith("ERROR"):
+            raise RuntimeError(raw)
         rows = [json.loads(line) for line in raw.splitlines() if line.strip().startswith("{")]
         out = [
             {"name": r.get("Names"), "image": r.get("Image"), "status": r.get("Status"), "state": r.get("State")}

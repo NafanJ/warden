@@ -91,6 +91,12 @@ async def _run_claude_agent(prompt_text: str, config: Config, backend: Backend,
 
 async def handle_incident(incident_id: int, config: Config, backend: Backend,
                           store: Store, channel: Channel | None = None) -> dict[str, Any]:
+    if config.engine == "langgraph":
+        from warden.local.service import submit_external
+        incident = store.get_incident(incident_id)
+        run = submit_external(config, f"Investigate incident #{incident_id}: {incident['summary']}",
+                              origin="sentinel", incident_id=incident_id)
+        return {"status": "monitoring", "run_id": run["id"], "cost_usd": 0}
     channel = channel or get_channel(config)
     incident_file = config.state_dir / "incidents" / f"{incident_id}.json"
     incident = json.loads(incident_file.read_text())
@@ -190,6 +196,11 @@ async def run_diagnose(question: str, config: Config, backend: Backend,
     """Owner-initiated, read-only investigation of a question (the `diagnose`
     command). Runs the agent in dry-run — it investigates and answers but never
     takes autonomous action — then posts its findings to the channel."""
+    if config.engine == "langgraph":
+        from warden.local.service import submit_external
+        run = submit_external(config, question, origin="discord-diagnose")
+        channel.send("Warden: local investigation queued. Findings will follow here.")
+        return {"status": "queued", "run_id": run["id"]}
     incident_id = _open_owner_incident("query", question, config, backend, store, {
         "summary": f"Owner question: {question}",
         "owner_question": question,
@@ -229,6 +240,11 @@ async def run_task(task: str, config: Config, backend: Backend,
     @mention). Unlike `diagnose`, this runs in the configured mode: Tier 1
     fixes execute autonomously and Tier 2 actions queue for approval with
     buttons, exactly as they do for a sentinel incident."""
+    if config.engine == "langgraph":
+        from warden.local.service import submit_external
+        run = submit_external(config, task)
+        channel.send("Warden: local task queued. Any server changes will need your approval.")
+        return {"status": "queued", "run_id": run["id"]}
     incident_id = _open_owner_incident("task", task, config, backend, store, {
         "summary": f"Owner task: {task}",
         "owner_task": task,

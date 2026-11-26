@@ -1,5 +1,15 @@
 # warden
 
+## Local Console
+
+Warden now includes a local LangGraph runtime and a responsive owner console: persistent
+chat, document search with citations, server inspection, approvals, and investigation traces.
+The new runtime uses Ollama for both chat and embeddings, and requires approval for
+AI-proposed changes while retaining configured deterministic maintenance routines.
+See [LOCAL_SETUP.md](LOCAL_SETUP.md) for setup, deployment, recovery, and verification.
+The provider-based agent described below remains available as the legacy implementation;
+it is not used when `WARDEN_ENGINE=langgraph`.
+
 **An autonomous ops agent that runs my home server so I don't have to.**
 
 warden monitors a 20-container Docker media server (Plex, Sonarr/Radarr, Transmission,
@@ -176,3 +186,6 @@ Also on the list:
 Python · OpenAI (`gpt-4o-mini`) or [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
 (`claude-sonnet-4-6`) · FastAPI · SQLite · Discord bot / WhatsApp Cloud API ·
 Plex API + Tautulli · systemd · Cloudflare Tunnel
+
+
+Media intake isolation and owner operations: [MEDIA_SECURITY.md](MEDIA_SECURITY.md).

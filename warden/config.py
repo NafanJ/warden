@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 @dataclass
 class Config:
+    engine: str = "legacy"  # legacy | langgraph
     mode: str = "dry-run"  # detect | dry-run | active
     llm_provider: str = "openai"  # openai | claude
     model: str = "claude-sonnet-4-6"  # used when llm_provider == claude
@@ -87,6 +88,8 @@ class Config:
 
     discord_bot_token: str = ""
     discord_channel_id: str = ""
+    discord_member_role_id: str = ""
+    discord_requests_url: str = "https://requests.nathanjoel.com"
     discord_owner_id: str = ""
     discord_guild_id: str = ""   # register slash commands here (instant); global if unset (~1h)
 
@@ -111,6 +114,8 @@ class Config:
             self.wa_verify_token,
             self.discord_bot_token,
             self.tautulli_api_key,
+            self.plex_token,
+            self.plex_webhook_token,
         ]
         return [s for s in candidates if s]
 
@@ -165,7 +170,8 @@ def load_config(env_file: str | Path | None = None) -> Config:
     load_dotenv(env_file or Path(__file__).resolve().parent.parent / ".env")
     e = os.environ.get
     state_dir = Path(e("WARDEN_STATE_DIR", "state"))
-    return Config(
+    config = Config(
+        engine=e("WARDEN_ENGINE", "legacy"),
         mode=e("WARDEN_MODE", "dry-run"),
         llm_provider=e("LLM_PROVIDER", "openai"),
         model=e("WARDEN_MODEL", "claude-sonnet-4-6"),
@@ -207,9 +213,24 @@ def load_config(env_file: str | Path | None = None) -> Config:
         wa_app_secret=e("WA_APP_SECRET", ""),
         discord_bot_token=e("DISCORD_BOT_TOKEN", ""),
         discord_channel_id=e("DISCORD_CHANNEL_ID", ""),
+        discord_member_role_id=e("DISCORD_MEMBER_ROLE_ID", ""),
+        discord_requests_url=e("DISCORD_REQUESTS_URL", "https://requests.nathanjoel.com"),
         discord_owner_id=e("DISCORD_OWNER_ID", ""),
         discord_guild_id=e("DISCORD_GUILD_ID", ""),
         enable_full_tasks=e("ENABLE_FULL_TASKS", "false").lower() in ("1", "true", "yes", "on"),
         full_task_cwd=e("FULL_TASK_CWD", ""),
         full_task_budget_usd=float(e("FULL_TASK_BUDGET_USD", "2.0")),
     )
+    if config.engine == "langgraph":
+        import json
+        import sqlite3
+        db_path = config.state_dir / "warden.db"
+        if db_path.exists():
+            with sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) as conn:
+                if conn.execute("SELECT 1 FROM sqlite_master WHERE name='local_settings'").fetchone():
+                    row = conn.execute("SELECT value FROM local_settings WHERE key='routines'").fetchone()
+                    if row:
+                        routines = json.loads(row[0])
+                        config.plex_throttle_downloads = routines.get("download_throttling", config.plex_throttle_downloads)
+                        config.reap_completed = routines.get("completed_torrent_cleanup", config.reap_completed)
+    return config
