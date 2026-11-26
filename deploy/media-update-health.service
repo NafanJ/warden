@@ -1,0 +1,10 @@
+[Unit]
+Description=Media update failure visibility
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/media-server/security/media_update_health.py
+UMask=0077
+Nice=15
+NoNewPrivileges=yes
+TimeoutStartSec=300

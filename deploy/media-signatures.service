@@ -1,0 +1,17 @@
+[Unit]
+Description=Update media scanner signatures
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/warden
+ExecStart=/usr/bin/python3 -m warden.media_guard freshen
+UMask=0077
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=100%
+MemoryMax=4G
+MemorySwapMax=256M
+NoNewPrivileges=yes
+TimeoutStartSec=1200
+Restart=on-failure
+RestartSec=1h

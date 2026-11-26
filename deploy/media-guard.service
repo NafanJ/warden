@@ -1,0 +1,25 @@
+[Unit]
+Description=Media intake inspection guard
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/warden
+ExecStart=/usr/bin/python3 -m warden.media_guard run
+Restart=on-failure
+RestartSec=30
+UMask=0077
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=100%
+MemoryMax=4G
+MemorySwapMax=256M
+TasksMax=64
+NoNewPrivileges=yes
+KillMode=control-group
+TimeoutStopSec=30
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+[Install]
+WantedBy=default.target
