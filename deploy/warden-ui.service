@@ -1,0 +1,20 @@
+[Unit]
+Description=Warden local owner console
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nathan
+WorkingDirectory=/opt/warden
+EnvironmentFile=/opt/warden/.env
+Environment=LANGSMITH_TRACING=false
+Environment=LANGCHAIN_TRACING_V2=false
+ExecStart=/opt/warden/.venv/bin/uvicorn warden.local.api:create_app --factory --host 192.168.1.101 --port 8485 --workers 1
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

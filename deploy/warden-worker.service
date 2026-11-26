@@ -1,0 +1,23 @@
+[Unit]
+Description=Warden local LangGraph worker
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nathan
+WorkingDirectory=/opt/warden
+EnvironmentFile=/opt/warden/.env
+Environment=LANGSMITH_TRACING=false
+Environment=LANGCHAIN_TRACING_V2=false
+ExecStart=/opt/warden/.venv/bin/python -m warden.local.worker
+Restart=on-failure
+RestartSec=5
+Nice=10
+CPUWeight=25
+MemoryMax=2G
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
